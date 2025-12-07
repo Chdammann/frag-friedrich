@@ -338,15 +338,6 @@ function animate() {
   requestAnimationFrame(animate);
   if (!model) return;
 
-  // 🧊 Nur Idle, wenn NICHT gerade frisch gesprochen wurde:
-  if (!talking && !justFinishedSpeaking && !mouthCooldown) {
-      setBlendshape(jawOpenIndex, 0.05);  // dezente Atmung
-      setBlendshape(mouthWideIndex, 0.0);
-      setBlendshape(mouthPuckerIndex, 0.0);
-      setBlendshape(mouthSmileIndex, 0);  // 🆕 reset mouthSmile
-      setBlendshape(mouthFrownIndex, 0);  // 🆕 reset mouthFrown
-  }
-
   const now = performance.now();
   const frontalY = -Math.PI / 2;               // frontal
   const rightY   = baseRotY - Math.PI / 2;     // Startpose rechts
@@ -414,10 +405,10 @@ function animate() {
   model.rotation.x = THREE.MathUtils.lerp(
     model.rotation.x,
     baseRotX + driftX,
-    0.03          // schnellere Reaktion
+    0.03
   );
 
-  // Y-Achse → nur wenn kein Hmmm aktiv (NICHT Antwort unterbrechen!)
+  // Y-Achse → nur wenn kein Hmmm aktiv
   if (!hmNeigen && !rising) {
     model.rotation.y = THREE.MathUtils.lerp(
       model.rotation.y,
@@ -426,19 +417,29 @@ function animate() {
     );
   }
 
-  // 🟢 OpenAI TTS / SpeechSynthesis steuern Lippen
-  // Animate greift NICHT ein, solange talking = true!
-  if (!talking) {
-    // hier nur Idle-Mundhaltung, sobald NICHT gesprochen wird:
-    setBlendshape(jawOpenIndex, 0.1);  // leicht offen (Atmung)
-    setBlendshape(mouthWideIndex, 0);
-    setBlendshape(mouthPuckerIndex, 0);
-    setBlendshape(mouthSmileIndex, 0);  // 🆕 reset mouthSmile
-    setBlendshape(mouthFrownIndex, 0);  // 🆕 reset mouthFrown
+  // 🟡 IDLE-MUND – natürlich, ruhig, würdevoll
+  // Aktiv nur wenn NICHT gesprochen wird
+  if (!talking && !justFinishedSpeaking && !mouthCooldown) {
+
+    const t2 = now * 0.0013;
+
+    // leichte Kiefer-Atmung
+    const idleJaw = 0.06 + Math.sin(t2 * 0.7) * 0.015;
+
+    // minimale Lippenbewegung (kaum sichtbar, aber lebendig)
+    const idleWide   = Math.sin(t2 * 0.9)  * 0.015;
+    const idlePucker = Math.cos(t2 * 0.55) * 0.01;
+
+    setBlendshape(jawOpenIndex,     idleJaw);
+    setBlendshape(mouthWideIndex,   Math.max(0, idleWide));
+    setBlendshape(mouthPuckerIndex, Math.max(0, idlePucker));
+    setBlendshape(mouthSmileIndex,  0);
+    setBlendshape(mouthFrownIndex,  0);
   }
 
   renderer.render(scene, camera);
 }
+
   /* -----------------------------
    BUTTON – GREET & LISTEN
 ----------------------------- */
