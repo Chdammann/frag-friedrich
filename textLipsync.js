@@ -174,3 +174,26 @@ async function playTextLipsyncPro(text, options = {}) {
 async function playTextLipsync(text) {
   return playTextLipsyncPro(text, { mode: "syllable" });
 }
+async function playTextLipsyncSynced(text, audioDuration) {
+  const syllables = tlSplitIntoSyllables(text);
+  const count = syllables.length;
+
+  if (count === 0 || !audioDuration) {
+    return playTextLipsyncPro(text); // Fallback
+  }
+
+  const timePerSyl = (audioDuration * 1000) / count;
+
+  tlBlendCache = {};
+
+  for (const syl of syllables) {
+    if (!syl) continue;
+
+    let v = tlDetectSpecialVisemes(syl) || tlLetterViseme(syl[0]);
+    tlApplyViseme(v);
+
+    await tlSleep(timePerSyl);
+  }
+
+  tlResetMouthToIdle();
+}
