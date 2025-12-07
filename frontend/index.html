@@ -519,113 +519,38 @@ function getBlendshape(index) {
   return value;
 }
 
-/* -----------------------------
-   SPEAK – NATÜRLICH & STABIL
------------------------------ */
+/* ----------------------------------------
+   SPEAK – BROWSER-TTS + TEXT-LIPSYNC PRO
+---------------------------------------- */
 function speak(text, slow = false) {
+
+  // 1️⃣ Vor dem Sprechen: natürlichen Text-Lipsync starten
+  // (Silben, Sonderlaute, Lerp-Übergänge)
+  playTextLipsyncPro(text, { mode: "syllable", baseSpeed: slow ? 200 : 160 });
+
+  // 2️⃣ Jetzt Browser-TTS vorbereiten
   const u = new SpeechSynthesisUtterance(text);
   u.lang = "de-DE";
-  u.rate = slow ? 0.75 : 1.1;
+  u.rate = slow ? 0.85 : 1.05;
+  u.pitch = 0.8;
 
-  // Verwende männliche Stimme, wenn verfügbar
+  // männliche Stimme verwenden, wenn verfügbar
   if (maleVoice) {
     u.voice = maleVoice;
   } else {
-    // Wenn männliche Stimme nicht verfügbar, verwende weibliche Stimme und setze Pitch tiefer
-    let voices = speechSynthesis.getVoices();
-    let femaleVoice = voices.find(v => v.name === "Google Deutsch");
-
+    // fallback: deutsche Standard-Stimme etwas tiefer stellen
+    const voices = speechSynthesis.getVoices();
+    const femaleVoice = voices.find(v => v.name.includes("Deutsch"));
     if (femaleVoice) {
       u.voice = femaleVoice;
-      u.rate = 0.8;
-      u.pitch = -1; // Tieferer Ton für die weibliche Stimme, um sie "männlicher" klingen zu lassen
+      u.pitch = 0.6;
+      u.rate = 0.95;
     }
   }
 
-let lipsyncInterval = null;
-
-let bs = {
-  jaw:        { current: 0, target: 0 },
-  wide:       { current: 0, target: 0 },
-  pucker:     { current: 0, target: 0 },
-  smile:      { current: 0, target: 0 },
-  frown:      { current: 0, target: 0 }
-};
-
-u.onstart = () => {
-  talking = true;
-
-  lipsyncInterval = setInterval(() => {
-
-    // 🟢 1) Würdevoller Sprecher = weniger, aber deutliche Impulse
-    // Hauptzielwerte wie vorher
-    if (Math.random() < 0.10) bs.jaw.target = Math.random() * 0.55;
-
-    // 🔧 NEU: Häufige kurze Mikro-Schließungen (0–12%)
-    if (Math.random() < 0.18) bs.jaw.target = Math.random() * 0.12;
-
-    if (Math.random() < 0.07) bs.wide.target   = Math.random() * 0.35;
-    if (Math.random() < 0.05) bs.pucker.target = Math.random() * 0.30;
-    if (Math.random() < 0.06) bs.smile.target  = Math.random() * 0.18;
-    if (Math.random() < 0.06) bs.frown.target  = Math.random() * 0.22;
-
-    // 🟢 2) Sanftere, gleichmäßigere Übergänge
-    bs.jaw.current    += (bs.jaw.target    - bs.jaw.current)    * 0.33;
-    bs.wide.current   += (bs.wide.target   - bs.wide.current)   * 0.25;
-    bs.pucker.current += (bs.pucker.target - bs.pucker.current) * 0.28;
-    bs.smile.current  += (bs.smile.target  - bs.smile.current)  * 0.20;
-    bs.frown.current  += (bs.frown.target  - bs.frown.current)  * 0.23;
-
-    // 🟢 3) Leiser Drift, würdevoll ruhig, ohne Hektik
-    bs.jaw.current    += (Math.random() * 0.02 - 0.01);
-    bs.wide.current   += (Math.random() * 0.012 - 0.006);
-    bs.pucker.current += (Math.random() * 0.012 - 0.006);
-    bs.smile.current  += (Math.random() * 0.01 - 0.005);
-    bs.frown.current  += (Math.random() * 0.01 - 0.005);
-
-    // 🟢 4) Grenzen – leicht angepasst für natürliche Schließungen
-    bs.jaw.current    = Math.min(Math.max(bs.jaw.current,    0.02), 0.55);
-    bs.wide.current   = Math.min(Math.max(bs.wide.current,   0),     0.38);
-    bs.pucker.current = Math.min(Math.max(bs.pucker.current, 0),     0.32);
-    bs.smile.current  = Math.min(Math.max(bs.smile.current,  0),     0.20);
-    bs.frown.current  = Math.min(Math.max(bs.frown.current,  0),     0.25);
-
-    // 🟢 5) Finales Setzen der Blendshapes
-    setBlendshape(jawOpenIndex,      bs.jaw.current);
-    setBlendshape(mouthWideIndex,    bs.wide.current);
-    setBlendshape(mouthPuckerIndex,  bs.pucker.current);
-    setBlendshape(mouthSmileIndex,   bs.smile.current);
-    setBlendshape(mouthFrownIndex,   bs.frown.current);
-
-  }, 33);
-};
-  u.onend = () => {
-    clearInterval(lipsyncInterval);
-    lipsyncInterval = null;
-    talking = false;
-
-    // Sofort in Idle
-    setBlendshape(jawOpenIndex, 0.05);
-    setBlendshape(mouthWideIndex, 0);
-    setBlendshape(mouthPuckerIndex, 0);
-    setBlendshape(mouthSmileIndex, 0);  // reset mouthSmile
-    setBlendshape(mouthFrownIndex, 0);  // reset mouthFrown
-
-    // Cooldown für animate(), aber micro-delay!
-    justFinishedSpeaking = true;
-    mouthCooldown = true;
-
-    // ⏱ dieser Trick killt das Geister-Zittern:
-    setTimeout(() => {
-      justFinishedSpeaking = false;
-      mouthCooldown = false;
-    }, 20); // nur 20ms → fühlbar, aber unsichtbar
-  };
-
-  // GANZ WICHTIG!
+  // 3️⃣ Sprechen starten (Audio)
   speechSynthesis.speak(u);
-}  // <== ENDE SPEAK – Klammern stimmen!
-
+}
 
 /* -----------------------------
    RESIZE
