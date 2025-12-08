@@ -423,9 +423,15 @@ function animate() {
 }
 
  /* -----------------------------
-   BUTTON – GREET & LISTEN
+   BUTTON – GREET & LISTEN (FIXED)
 ----------------------------- */
 document.getElementById("micBtn").onclick = () => {
+
+  // ❗ NEU: Wenn TTS läuft → Klicks komplett ignorieren
+  if (talking || tlActive) {
+    console.warn("⛔ Aktion während Sprache blockiert.");
+    return;
+  }
 
   // ❗ Wenn Recognition gerade läuft → NICHT erneut starten
   if (recognizing) {
@@ -439,7 +445,7 @@ document.getElementById("micBtn").onclick = () => {
     greeted = true;
     STATE = "greet";
 
-    frontalFix = false;               // ab jetzt Bewegung erlaubt
+    frontalFix = false;
     rising = true;
     riseStartTime = performance.now();
 
@@ -460,7 +466,6 @@ document.getElementById("micBtn").onclick = () => {
   lastTranscript = "";
   STATE = "listen";
 
-  // ⭐ WICHTIG: Aufnahme beginnt jetzt
   recognizing = true;
   recognition.start();
 };
