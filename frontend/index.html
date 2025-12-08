@@ -257,6 +257,10 @@ if ("webkitSpeechRecognition" in window) {
 
   // Aufnahme beendet:
   recognition.onend = () => {
+
+    // ⭐ WICHTIG: Recognition freigeben
+    recognizing = false;
+
     if (STATE === "listen" && lastTranscript) {
 
       // 1️⃣ HMMM – Kopf langsam nach links:
@@ -278,31 +282,35 @@ if ("webkitSpeechRecognition" in window) {
         .then(r => r.json())
         .then(data => {
 
-         // 2️⃣ ANTWORT BEGINNT → frontal
-resetMovements();
+          // 2️⃣ ANTWORT BEGINNT → frontal
+          resetMovements();
+          STATE = "answer";
+          rising = true;
+          riseStartTime = performance.now();
 
-// Antwort erst starten, wenn wirklich gesprochen wird
-STATE = "answer";
-rising = true;
-riseStartTime = performance.now();
-talking = true;
+          // ⭐ WICHTIG: talking NICHT VORHER setzen
+          // Das übernimmt speak() automatisch synchron
+          
+          // Antwort sprechen (Browser TTS + Text-Lipsync)
+          speak(data.answer);
 
-      // 2️⃣ Antwort sprechen (Browser TTS + Text-Lipsync)
-speak(data.answer);
-
-          // 3️⃣ ANTWORT FERTIG → jetzt erst zurück nach rechts!
+          // 3️⃣ ANTWORT FERTIG → Rückkehr nach rechts
           const waitUntilDone = setInterval(() => {
-            if (!talking && !tlActive && !rising) {
+
+            // ⭐ Korrekt: Nur sprechen → talking
+            if (!talking && !rising) {
               clearInterval(waitUntilDone);
               resetMovements();
               greeted = false;
               STATE = "idle";
 
-              // ⭐ TRIGGER → block 4 aktiviert RECHTS-NEIGUNG!
+              // ⭐ TRIGGER → block 4 aktiviert Rückkehr nach rechts
               toIdlePose = true;
               toIdleStart = performance.now();
             }
+
           }, 200);
+
         })
         .catch(() => {
           resetMovements();
@@ -317,7 +325,7 @@ speak(data.answer);
     }
   };
 }
-  
+
 // ====================================
 // ANIMATE – FINAL & STABLE
 // ====================================
