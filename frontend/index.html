@@ -280,32 +280,21 @@ if ("webkitSpeechRecognition" in window) {
         .then(r => r.json())
         .then(data => {
 
-          // 2️⃣ ANTWORT BEGINNT → frontal
-          resetMovements();
-          STATE = "answer";
-          rising = true;
-          riseStartTime = performance.now();
-          // 🔁 NEUER BLOCK: ECHTES TTS MIT LIPSYNC
-fetch("/tts", {
-  method: "POST",
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({ text: data.answer })
-})
-.then(r => r.json())
-.then(dataTTS => {
-  // 1. Audio + Lippenbewegung
-  playAudioAndLipsync(dataTTS.audio, dataTTS.lipsync);
-})
-.catch(err => {
-  console.error("❌ TTS-Fallback:", err);
-  // Fallback: alte TTS nutzen
-  speak(data.answer);
-});
+         // 2️⃣ ANTWORT BEGINNT → frontal
+resetMovements();
 
+// Antwort erst starten, wenn wirklich gesprochen wird
+STATE = "answer";
+rising = true;
+riseStartTime = performance.now();
+talking = true;
+
+      // 2️⃣ Antwort sprechen (Browser TTS + Text-Lipsync)
+speak(data.answer);
 
           // 3️⃣ ANTWORT FERTIG → jetzt erst zurück nach rechts!
           const waitUntilDone = setInterval(() => {
-            if (!talking && !rising) {
+            if (!talking && !tlActive && !rising) {
               clearInterval(waitUntilDone);
               resetMovements();
               greeted = false;
