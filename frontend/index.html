@@ -111,14 +111,11 @@ let audioCtx, analyser, src;
 let model, STATE = "idle";
 let lastTranscript = "";
 let talking = false, greeted = false;
-let mouthCooldown = false;   // 🆕 NEU
-  // Zusatzflag: 1 Frame Verzögerung nach Speech-Ende
-let justFinishedSpeaking = false;
+let mouthCooldown = false;          // 🆕 Anti-Zittern nach Sprachende
+let justFinishedSpeaking = false;   // mikro-Delay nach Speech-Ende
 
-
-// jawIndex NICHT hier setzen!
-// --> wird später automatisch gesetzt, sobald das Modell geladen wurde
-
+// ⭐ NEU: verhindert recognition.start() Doppelklick-Fehler
+let recognizing = false;            // WICHTIG: global, nicht in resetMovements!
 
 // === Bewegungszustände ===
 let frontalFix = true;              // nach Laden: noch nicht frontal
@@ -130,7 +127,7 @@ let toIdlePose   = false, toIdleStart = 0;
 const toIdleDuration = 3000;        // sanfte Rückkehr (kann z.B. 3000 sein)
 
 // === Animationszeiten (ms) ===
-const hmDuration   = 8000;         // Hmmm sehr langsam
+const hmDuration   = 8000;          // Hmmm sehr langsam
 const riseDuration = 3000;          // Begrüßung / Antwort → frontal
 
 // === Grundposition Avatar ===
@@ -139,13 +136,14 @@ let baseRotX = 0.25;
 let baseY = 0;
 
 // 🛡️ NIEMALS gleichzeitig mehrere Bewegungen
-// ❗ Wichtig: toIdlePose DARF NICHT hier gelöscht werden,
-// denn es wird nur von der StateMachine gesetzt!
+// ❗ WICHTIG: toIdlePose DARF NICHT zurückgesetzt werden!
+//    (wird zentral über die StateMachine gesteuert)
 function resetMovements() {
   hmNeigen = false;
   rising   = false;
   talking  = false;
 }
+
 /* -----------------------------
    THREE.js SETUP
 ----------------------------- */
