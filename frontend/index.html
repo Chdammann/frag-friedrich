@@ -431,10 +431,16 @@ function animate() {
 }
 
 
-  /* -----------------------------
+ /* -----------------------------
    BUTTON – GREET & LISTEN
 ----------------------------- */
 document.getElementById("micBtn").onclick = () => {
+
+  // ❗ Wenn Recognition gerade läuft → NICHT erneut starten
+  if (recognizing) {
+    console.warn("⚠️ Aufnahme läuft bereits – erneuter Start verhindert.");
+    return;
+  }
 
   // Erste Betätigung → Begrüßung
   if (!greeted) {
@@ -462,8 +468,12 @@ document.getElementById("micBtn").onclick = () => {
   resetMovements();
   lastTranscript = "";
   STATE = "listen";
+
+  // ⭐ WICHTIG: Aufnahme beginnt jetzt
+  recognizing = true;
   recognition.start();
 };
+
 /* -----------------------------
    1) MÄNNLICHE STIMME FEST SETZEN  (GLOBAL!)
 ----------------------------- */
