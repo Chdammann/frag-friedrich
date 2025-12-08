@@ -49,30 +49,23 @@ function tlSplitIntoSyllables(text) {
     .replace(/[^a-zäöüß ]+/g, " ")
     .split(/\s+/)
     .filter(Boolean)
-    .flatMap(word => word.match(/[bcdfghjklmnpqrstvwxyz]*[aeiouäöü]+[a-zäöüß]*/g) || [word]);
+    .flatMap(word =>
+      word.match(/[bcdfghjklmnpqrstvwxyz]*[aeiouäöü]+[a-zäöüß]*/g) || [word]
+    );
 }
 
 // --------------------------------------
-// 4. Sanfte Blendshape-Übergänge
+// 4. VISEME SET – OHNE SMOOTHING!!
 // --------------------------------------
-let tlBlendCache = {};
-
-function tlSmoothSet(index, target, factor = 0.55) {
-  if (index == null || index < 0) return;
-
-  const current = tlBlendCache[index] ?? 0;
-  const next = current + (target - current) * factor;
-
-  tlBlendCache[index] = next;
-  setBlendshape(index, next);
-}
 
 function tlApplyViseme(v) {
-  tlSmoothSet(jawOpenIndex,     v.jaw   ?? 0);
-  tlSmoothSet(mouthWideIndex,   v.wide  ?? 0);
-  tlSmoothSet(mouthPuckerIndex, v.pucker ?? 0);
-  tlSmoothSet(mouthFrownIndex,  v.frown ?? 0);
-  tlSmoothSet(mouthSmileIndex,  v.smile ?? 0);
+  if (!v) return;
+
+  setBlendshape(jawOpenIndex,     v.jaw   ?? 0);
+  setBlendshape(mouthWideIndex,   v.wide  ?? 0);
+  setBlendshape(mouthPuckerIndex, v.pucker ?? 0);
+  setBlendshape(mouthFrownIndex,  v.frown ?? 0);
+  setBlendshape(mouthSmileIndex,  v.smile ?? 0);
 }
 
 function tlResetMouthToIdle() {
@@ -85,19 +78,15 @@ function tlResetMouthToIdle() {
 async function playTextLipsyncPro(text, options = {}) {
   if (!text || typeof text !== "string") return;
 
-  tlActive = true;   // läuft
+  tlActive = true;
 
-  const mode      = options.mode      || "syllable";
-  const baseSpeed = options.baseSpeed || 200;  // etwas langsamer als vorher
+  const mode = options.mode || "syllable";
+  const baseSpeed = options.baseSpeed || 200;
 
-  tlBlendCache = {};
-
-  const units = mode === "letter"
-    ? text.split("")
-    : tlSplitIntoSyllables(text);
+  const units =
+    mode === "letter" ? text.split("") : tlSplitIntoSyllables(text);
 
   for (const unit of units) {
-    if (!unit) continue;
     const syl = unit.trim();
     if (!syl) continue;
 
@@ -110,10 +99,7 @@ async function playTextLipsyncPro(text, options = {}) {
     await tlSleep(dur);
   }
 
-  // ❗ WICHTIG:
-  // KEIN tlResetMouthToIdle();
-  // KEIN tlActive = false;
-  // Das macht jetzt SPEAK.onend(), damit Audio & Mund zusammen enden.
+  // Ende: Mundschließen & tlActive werden von SPEAK.onend erledigt
 }
 
 // --------------------------------------
