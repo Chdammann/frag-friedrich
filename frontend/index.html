@@ -335,6 +335,18 @@ function animate() {
     return;
   }
 
+  // ⭐️ NEU: Sanfte Rückkehr nach rechts nach Antwortende
+  if (toIdlePose) {
+    const t = (now - toIdleStart) / toIdleDuration;
+
+    model.rotation.y = THREE.MathUtils.lerp(model.rotation.y, rightY, 0.03);
+    model.rotation.x = THREE.MathUtils.lerp(model.rotation.x, baseRotX, 0.03);
+
+    if (t >= 1) {
+      toIdlePose = false;
+    }
+  }
+
   // 1️⃣ GREET / ANTWORTBEGINN → FRONTAL
   if (rising) {
     const t = (now - riseStartTime) / riseDuration;
@@ -357,21 +369,21 @@ function animate() {
     model.rotation.x = THREE.MathUtils.lerp(model.rotation.x, 0, 0.03);
   }
 
-  // 4️⃣ TALKING = SPRICHT → FRONTAL & ATMEN
+  // 4️⃣ TALKING → FRONTAL
   else if (talking) {
     model.position.y = baseY + Math.sin(now * 0.0015) * 0.008;
     model.rotation.y = THREE.MathUtils.lerp(model.rotation.y, frontalY, 0.03);
     model.rotation.x = THREE.MathUtils.lerp(model.rotation.x, 0, 0.03);
   }
 
-  // 5️⃣ WARTET AUF FRAGE → FRONTAL
+  // 5️⃣ LISTEN/GREET → FRONTAL
   else if (STATE === "listen" || STATE === "greet") {
     model.position.y = baseY + Math.sin(now * 0.0012) * 0.006;
     model.rotation.y = THREE.MathUtils.lerp(model.rotation.y, frontalY, 0.03);
     model.rotation.x = THREE.MathUtils.lerp(model.rotation.x, 0, 0.03);
   }
 
-  // 6️⃣ ENDE → SANFT ZURÜCK NACH RECHTS
+  // 6️⃣ IDLE → ZURÜCK NACH RECHTS + ATEM
   else if (STATE === "idle" && !talking && !rising) {
     const breathSpeed = 0.0011 + Math.sin(now * 0.00005) * 0.0004;
     const breathAmp   = 0.006  + Math.sin(now * 0.00008) * 0.003;
@@ -381,30 +393,19 @@ function animate() {
     model.rotation.x = THREE.MathUtils.lerp(model.rotation.x, baseRotX, 0.03);
   }
 
-  // ⭐ Sichtbare, natürliche Blickbewegungen – Version 2
+  // ⭐ Blickbewegungen
   const driftX = Math.sin(now * 0.0012) * 0.05;
   const driftY = Math.sin(now * 0.0010) * 0.04;
 
-  model.rotation.x = THREE.MathUtils.lerp(
-    model.rotation.x,
-    baseRotX + driftX,
-    0.03
-  );
+  model.rotation.x = THREE.MathUtils.lerp(model.rotation.x, baseRotX + driftX, 0.03);
 
   if (!hmNeigen && !rising) {
-    model.rotation.y = THREE.MathUtils.lerp(
-      model.rotation.y,
-      model.rotation.y + driftY,
-      0.018
-    );
+    model.rotation.y = THREE.MathUtils.lerp(model.rotation.y, model.rotation.y + driftY, 0.018);
   }
 
-  // 🟡 IDLE-MUND – natürlich, ruhig, würdevoll
-  // ❗️ NEU: Nur wenn KEIN Text-Lipsync aktiv ist (!tlActive)
+  // 🟡 IDLE-MUND
   if (!talking && !justFinishedSpeaking && !mouthCooldown && !tlActive) {
-
     const t2 = now * 0.0013;
-
     const idleJaw = 0.06 + Math.sin(t2 * 0.7) * 0.015;
     const idleWide   = Math.sin(t2 * 0.9)  * 0.015;
     const idlePucker = Math.cos(t2 * 0.55) * 0.01;
@@ -418,7 +419,6 @@ function animate() {
 
   renderer.render(scene, camera);
 }
-
 
  /* -----------------------------
    BUTTON – GREET & LISTEN
@@ -500,20 +500,19 @@ function lerp(a, b, t) {  // linearer Übergang
   return a + (b - a) * t;
 }
 
-function getBlendshape(index) {
-  let value = 0;
-  model.traverse(obj => {
-    if (obj.isMesh && obj.morphTargetInfluences) {
-      value = obj.morphTargetInfluences[index] ?? 0;
-    }
-  });
-  return value;
-}
-
 /* ----------------------------------------
    SPEAK – SYNCHRONE TTS + TEXT-LIPSYNC
 ---------------------------------------- */
 function speak(text, slow = false) {
+
+  // 🔥 Startflags setzen
+  talking = true;
+  tlActive = true;   // Idle sofort blockieren
+
+  // Grobe TTS-Dauer berechnen
+  const baseSpeed = slow ? 200 : 160;
+  const textUnits = tlSplitIntoSyllables(text).length;
+  const estimatedDuration = textUnits * baseSpeed;
 
   // TTS vorbereiten
   const u = new SpeechSynthesisUtterance(text);
@@ -525,29 +524,23 @@ function speak(text, slow = false) {
   if (maleVoice) {
     u.voice = maleVoice;
   } else {
-    // Fallback: deutsche Stimme suchen
     const voices = speechSynthesis.getVoices();
     const v = voices.find(v => v.lang.startsWith("de"));
     if (v) u.voice = v;
   }
 
-  // 🔥 WICHTIG: talking aktivieren, bevor irgendwas startet
-  talking = true;
-
-  // 1️⃣ Wenn TTS startet → Lipsync starten
+  // 1️⃣ TTS START → Text-Lipsync starten
   u.onstart = () => {
-    playTextLipsyncPro(
-      text,
-      { mode: "syllable", baseSpeed: slow ? 200 : 160 }
-    );
+    playTextLipsyncPro(text, { mode: "syllable", baseSpeed });
   };
 
-  // 2️⃣ Wenn TTS endet → Mund schließen & talking beenden
+  // 2️⃣ TTS ENDE → kontrolliert Mund schließen
   u.onend = () => {
 
-    // TTS ist fertig → Lipsync muss auch beendet sein
+    // Lipsync beenden
     tlActive = false;
 
+    // TTS fertig
     talking = false;
     justFinishedSpeaking = true;
 
@@ -559,6 +552,7 @@ function speak(text, slow = false) {
   // 3️⃣ Jetzt wirklich sprechen
   speechSynthesis.speak(u);
 }
+
 /* -----------------------------
    RESIZE
 ----------------------------- */
