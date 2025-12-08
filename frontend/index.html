@@ -404,9 +404,9 @@ function animate() {
   if (!hmNeigen && !rising) {
     model.rotation.y = THREE.MathUtils.lerp(model.rotation.y, model.rotation.y + driftY, 0.018);
   }
+ // 🟡 IDLE-MUND – nur wenn absolut NICHTS mit Sprache aktiv ist
+if (!talking && !tlActive && !justFinishedSpeaking && !mouthCooldown && STATE !== "answer") {
 
-  // 🟡 IDLE-MUND
-  if (!talking && !justFinishedSpeaking && !mouthCooldown && !tlActive) {
     const t2 = now * 0.0013;
     const idleJaw = 0.06 + Math.sin(t2 * 0.7) * 0.015;
     const idleWide   = Math.sin(t2 * 0.9)  * 0.015;
