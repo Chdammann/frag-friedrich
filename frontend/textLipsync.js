@@ -39,7 +39,7 @@ function tlLetterViseme(letter) {
   }
 
   // Standard: leicht geöffnet, neutral
-  return { jaw: 0.12, wide: 0.05, pucker: 0, frown: 0, smile: 0 };
+  return { jaw: 0.22, wide: 0.12, pucker: 0, frown: 0, smile: 0 };
 }
 
 // --------------------------------------
@@ -93,7 +93,7 @@ function tlSplitIntoSyllables(text) {
 // --------------------------------------
 let tlBlendCache = {}; // merkt sich die letzten Werte, NUR für Text-Lipsync
 
-function tlSmoothSet(index, target, factor = 0.35) {
+function tlSmoothSet(index, target, factor = 0.55) {
   if (index == null || index < 0) return;
   const current = tlBlendCache[index] ?? 0;
   const next = current + (target - current) * factor;
