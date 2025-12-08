@@ -432,15 +432,28 @@ if (!talking && !tlActive && STATE !== "answer") {
   }
 }
 
-  // 🟡 IDLE-MUND – vorübergehend DEAKTIVIERT
-  // Mundhaltung übernimmt komplett:
-  // - tlResetMouthToIdle() am Ende von speak()
-  // - textLipsync.js während des Sprechens
-  if (!talking && !justFinishedSpeaking && !mouthCooldown && !lipsyncTimer && !tlActive) {
-    // Hier absichtlich KEINE setBlendshape()-Aufrufe mehr.
-    // Wenn wir später wieder eine ganz leichte Atmung wollen,
-    // können wir das gezielt, aber ohne Konflikt einbauen.
-  }
+  // 🟡 IDLE-MUND — nur wenn absolut sicher NICHT sprechen!
+const isIdleMouthAllowed =
+    !talking &&
+    !lipsyncTimer &&
+    !tlActive &&
+    !justFinishedSpeaking &&
+    STATE === "idle";
+
+if (isIdleMouthAllowed) {
+
+    const t2 = now * 0.0013;
+
+    const idleJaw = 0.06 + Math.sin(t2 * 0.7) * 0.015;
+    const idleWide   = Math.sin(t2 * 0.9)  * 0.015;
+    const idlePucker = Math.cos(t2 * 0.55) * 0.01;
+
+    setBlendshape(jawOpenIndex,     idleJaw);
+    setBlendshape(mouthWideIndex,   Math.max(0, idleWide));
+    setBlendshape(mouthPuckerIndex, Math.max(0, idlePucker));
+    setBlendshape(mouthSmileIndex,  0);
+    setBlendshape(mouthFrownIndex,  0);
+}
 
 
   renderer.render(scene, camera);
