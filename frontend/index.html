@@ -517,20 +517,22 @@ function speak(text, slow = false) {
     playTextLipsyncPro(text, { mode: "syllable", baseSpeed });
   };
 
-  // 2️⃣ TTS ENDE → kontrolliert Mund schließen
-  u.onend = () => {
+ u.onend = () => {
 
-    // Lipsync beenden
-    tlActive = false;
+  // Mund sauber in Idle-Form bringen
+  tlResetMouthToIdle();
 
-    // TTS fertig
-    talking = false;
-    justFinishedSpeaking = true;
+  // Lipsync beenden → Idle darf wieder ran
+  tlActive = false;
 
-    setTimeout(() => {
-      justFinishedSpeaking = false;
-    }, 80);
-  };
+  // TTS fertig
+  talking = false;
+  justFinishedSpeaking = true;
+
+  setTimeout(() => {
+    justFinishedSpeaking = false;
+  }, 80);
+};
 
   // 3️⃣ Jetzt wirklich sprechen
   speechSynthesis.speak(u);
