@@ -469,21 +469,47 @@ document.getElementById("micBtn").onclick = () => {
    1) MÄNNLICHE STIMME FEST SETZEN  (GLOBAL!)
 ----------------------------- */
 let maleVoice = null;
+let voiceReady = false;
 
+// Stimme auswählen, wenn verfügbar
 function setMaleVoice() {
   const voices = speechSynthesis.getVoices();
 
   if (!voices.length) {
+    // Chrome lädt Stimmen verzögert → retry
     setTimeout(setMaleVoice, 150);
     return;
   }
 
-  maleVoice = voices.find(v => v.name === "Microsoft Stefan - German (Germany)");
+  // bevorzugte Stimme
+  maleVoice =
+      voices.find(v => v.name === "Microsoft Stefan - German (Germany)") ||
+      voices.find(v => v.lang === "de-DE") ||
+      voices[0];
+
   console.log("Ausgewählte Stimme:", maleVoice);
+
+  voiceReady = true;
+
+  // Chrome TTS-Warmup → verhindert Roboterstimme und zu frühes Ende
+  warmupTTS();
 }
 
 speechSynthesis.onvoiceschanged = setMaleVoice;
 setMaleVoice();
+
+// Chrome Warmup – stumm, aber stabilisiert TTS komplett
+function warmupTTS() {
+  if (!voiceReady) return;
+
+  const u = new SpeechSynthesisUtterance("…");
+  u.volume = 0; // stumm
+  u.rate = 1;
+  u.pitch = 1;
+  u.voice = maleVoice;
+
+  speechSynthesis.speak(u);
+}
 
 /* ----------------------------------------
    SPEAK – SYNCHRONE TTS + TEXT-LIPSYNC
@@ -491,85 +517,76 @@ setMaleVoice();
 function speak(text, slow = false) {
   if (!text) return;
 
-  // Falls noch ein alter Lipsync-Timer läuft → stoppen
+  // Stimme noch nicht bereit → warten
+  if (!voiceReady) {
+    console.warn("⏳ Stimme noch nicht bereit – speak verzögert");
+    setTimeout(() => speak(text, slow), 120);
+    return;
+  }
+
+  // Falls alter Lippen-Timer läuft → stoppen
   if (lipsyncTimer) {
     clearInterval(lipsyncTimer);
     lipsyncTimer = null;
   }
 
-  // 🔥 Statusflags
+  // 🔥 Flags
   talking  = true;
-  tlActive = true;   // Idle-Mund blockieren, solange wir Lippen steuern
+  tlActive = true;
 
-  // Silben / Einheiten für Lipsync vorbereiten
+  // Silben vorbereiten
   const units = tlSplitIntoSyllables(text);
   let idx = 0;
 
-  // Basisgeschwindigkeit für die Schritte
-  const baseStep = slow ? 220 : 170;   // etwas langsamer bei „Ähm… einen Moment“
+  // Geschwindigkeit pro Silbe
+  const baseStep = slow ? 220 : 170;
 
-  // TTS vorbereiten
+  // === TTS vorbereiten ===
   const u = new SpeechSynthesisUtterance(text);
   u.lang  = "de-DE";
   u.rate  = slow ? 0.85 : 1.05;
   u.pitch = 0.8;
+  u.voice = maleVoice;
 
-  // Stimme setzen
-  if (maleVoice) {
-    u.voice = maleVoice;
-  } else {
-    const voices = speechSynthesis.getVoices();
-    const v = voices.find(v => v.lang.startsWith("de"));
-    if (v) u.voice = v;
-  }
-
-  // 1️⃣ Wenn TTS startet → Lipsync-Timer starten
+  // 1️⃣ Start → Lipsync starten
   u.onstart = () => {
     if (!units.length) return;
 
     lipsyncTimer = setInterval(() => {
       if (!units.length) return;
 
-      // aktuellen oder letzten Index nehmen
-      const currentIndex = Math.min(idx, units.length - 1);
-      const sylRaw = units[currentIndex];
+      const i = Math.min(idx, units.length - 1);
+      const sylRaw = units[i];
       if (!sylRaw) return;
 
       const syl = sylRaw.trim();
       if (!syl) return;
 
-      // Sonderlaute → sonst erster Buchstabe
       const v = tlDetectSpecialVisemes(syl) || tlLetterViseme(syl[0]);
       tlApplyViseme(v);
 
-      // langsam durch den Text iterieren
-      if (idx < units.length - 1) {
-        idx++;
-      }
-      // wenn idx >= units.length-1 ist, bleiben wir auf der letzten Silbe,
-      // bis TTS fertig ist → Mund bleibt lebendig, nicht komplett tot
+      // weiter durch Text gehen
+      if (idx < units.length - 1) idx++;
+      // am Ende: auf letzter Silbe bleiben → natürlicher
     }, baseStep);
   };
 
-  // 2️⃣ Wenn TTS endet → Timer stoppen & Mund in Idle zurück
+  // 2️⃣ Ende → Lipsync stoppen & Mund schließen
   u.onend = () => {
     if (lipsyncTimer) {
       clearInterval(lipsyncTimer);
       lipsyncTimer = null;
     }
 
-    tlResetMouthToIdle();   // sanft in Ausgangsstellung
-
+    tlResetMouthToIdle();
     tlActive = false;
     talking  = false;
-    justFinishedSpeaking = true;
 
-    setTimeout(() => {
-      justFinishedSpeaking = false;
-    }, 80);
+    justFinishedSpeaking = true;
+    setTimeout(() => justFinishedSpeaking = false, 80);
   };
 
-  // 3️⃣ Jetzt wirklich sprechen
+  // 3️⃣ Start der TTS Ausgabe
   speechSynthesis.speak(u);
 }
 
