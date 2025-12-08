@@ -552,7 +552,11 @@ function speak(text, slow = false) {
   u.onstart = () => {
     if (!units.length) return;
 
-    lipsyncTimer = setInterval(() => {
+lipsyncTimer = setInterval(() => {
+
+  console.log("🔸 Lipsync Tick:", idx, "/", units.length, "tlActive:", tlActive, "talking:", talking);
+
+
       if (!units.length) return;
 
       const i = Math.min(idx, units.length - 1);
@@ -572,7 +576,9 @@ function speak(text, slow = false) {
   };
 
   // 2️⃣ Ende → Lipsync stoppen & Mund schließen
-  u.onend = () => {
+ u.onend = () => {
+  console.log("🛑 TTS END – lipsyncTimer cleared");
+
     if (lipsyncTimer) {
       clearInterval(lipsyncTimer);
       lipsyncTimer = null;
