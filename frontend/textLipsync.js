@@ -85,15 +85,16 @@ function tlResetMouthToIdle() {
 async function playTextLipsyncPro(text, options = {}) {
   if (!text || typeof text !== "string") return;
 
-  // 🔥 START
-  tlActive = true;
+  tlActive = true;   // läuft
 
   const mode      = options.mode      || "syllable";
-  const baseSpeed = options.baseSpeed || 160;
+  const baseSpeed = options.baseSpeed || 200;  // etwas langsamer als vorher
 
   tlBlendCache = {};
 
-  const units = mode === "letter" ? text.split("") : tlSplitIntoSyllables(text);
+  const units = mode === "letter"
+    ? text.split("")
+    : tlSplitIntoSyllables(text);
 
   for (const unit of units) {
     if (!unit) continue;
@@ -109,10 +110,10 @@ async function playTextLipsyncPro(text, options = {}) {
     await tlSleep(dur);
   }
 
-  tlResetMouthToIdle();
-
-  // 🔥 ENDE
-  tlActive = false;
+  // ❗ WICHTIG:
+  // KEIN tlResetMouthToIdle();
+  // KEIN tlActive = false;
+  // Das macht jetzt SPEAK.onend(), damit Audio & Mund zusammen enden.
 }
 
 // --------------------------------------
