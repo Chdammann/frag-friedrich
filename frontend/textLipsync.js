@@ -19,11 +19,11 @@ function tlLetterViseme(letter) {
 
   // Offene Vokale
   if ("aäe".includes(l)) {
-    return { jaw: 0.45, wide: 0.28, pucker: 0,    frown: 0, smile: 0.1 };
+    return { jaw: 0.55, wide: 0.33, pucker: 0, frown: 0, smile: 0.15 };
   }
   // Runde Vokale
   if ("ouöü".includes(l)) {
-    return { jaw: 0.25, wide: 0.05, pucker: 0.55, frown: 0, smile: 0 };
+    return { jaw: 0.32, wide: 0.08, pucker: 0.65, frown: 0, smile: 0 };
   }
   // I: breit
   if ("i".includes(l)) {
