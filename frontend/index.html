@@ -433,8 +433,7 @@ if (!talking && !tlActive && STATE !== "answer") {
 }
 
  // 🟡 IDLE-MUND – nur wenn absolut NICHTS mit Sprache aktiv ist
-if (!talking && !tlActive && !justFinishedSpeaking && !mouthCooldown && STATE !== "answer") {
-
+if (!talking && !justFinishedSpeaking && !mouthCooldown && !lipsyncTimer && !tlActive) {
     const t2 = now * 0.0013;
     const idleJaw = 0.06 + Math.sin(t2 * 0.7) * 0.015;
     const idleWide   = Math.sin(t2 * 0.9)  * 0.015;
@@ -545,80 +544,95 @@ function warmupTTS() {
 }
 
 /* ----------------------------------------
-   SPEAK – Chrome-stabiler TTS + Lipsync
+   SPEAK – SYNCHRONE TTS + TEXT-LIPSYNC
 ---------------------------------------- */
 function speak(text, slow = false) {
   if (!text) return;
 
+  // Stimme noch nicht bereit → warten
   if (!voiceReady) {
-    setTimeout(() => speak(text, slow), 150);
+    console.warn("⏳ Stimme noch nicht bereit – speak verzögert");
+    setTimeout(() => speak(text, slow), 120);
     return;
   }
 
-  // Sicherstellen, dass keine alten Timer weiterlaufen
+  // Falls alter Lippen-Timer läuft → stoppen
   if (lipsyncTimer) {
     clearInterval(lipsyncTimer);
     lipsyncTimer = null;
   }
 
+  // 🔥 Flags setzen → Idle-Mund AUS
   talking  = true;
   tlActive = true;
 
+  // Silben vorbereiten
   const units = tlSplitIntoSyllables(text);
   let idx = 0;
+
+  // Geschwindigkeit pro Silbe
+  const baseStep = slow ? 220 : 170;
 
   // === TTS vorbereiten ===
   const u = new SpeechSynthesisUtterance(text);
   u.lang  = "de-DE";
-  u.rate  = slow ? 0.85 : 0.94;   // Chrome-stabile Werte
-  u.pitch = 0.85;
+  u.rate  = slow ? 0.8 : 0.92;
+  u.pitch = 0.8;
   u.voice = maleVoice;
 
-  // ⭐ 1) Chrome-stabile Lippenbewegung mit onboundary
-  u.onboundary = (ev) => {
-    if (ev.name !== "word" && ev.name !== "sentence") return;
+  // 1️⃣ Start → Lipsync starten
+  u.onstart = () => {
+    if (!units.length) return;
 
-    if (idx >= units.length) idx = units.length - 1;
+    lipsyncTimer = setInterval(() => {
+      // INCORRECT: idx > units → letzte Silbe leben lassen
+      let currentIndex = idx;
 
-    const syl = units[idx].trim();
-    if (!syl) return;
+      if (idx >= units.length) {
+        currentIndex = units.length - 1;
 
-    const v = tlDetectSpecialVisemes(syl) || tlLetterViseme(syl[0]);
-    tlApplyViseme(v);
+        // 👉 leichte Variation, damit der Mund in Pausen nicht "tot" ist
+        const wobble = Math.sin(performance.now() * 0.012) * 0.12;
+        const lastSyl = units[currentIndex].trim();
 
-    idx++;
+        let v = tlDetectSpecialVisemes(lastSyl) || tlLetterViseme(lastSyl[0]);
+        v = { ...v, jaw: v.jaw + wobble };
+
+        tlApplyViseme(v);
+        return;
+      }
+
+      const sylRaw = units[currentIndex];
+      if (!sylRaw) return;
+
+      const syl = sylRaw.trim();
+      if (!syl) return;
+
+      const v = tlDetectSpecialVisemes(syl) || tlLetterViseme(syl[0]);
+      tlApplyViseme(v);
+
+      idx++;
+    }, baseStep);
   };
 
-  // ⭐ 2) Wenn TTS zu schnell boundarys liefert → fallback: leichte Bewegung halten
-  lipsyncTimer = setInterval(() => {
-    if (!talking) return;
-
-    // Falls keine boundary mehr kommt → letzte Silbe lebendig halten
-    const last = units[Math.min(idx, units.length - 1)];
-    if (!last) return;
-
-    const wobble = Math.sin(performance.now() * 0.012) * 0.10;
-    let v = tlDetectSpecialVisemes(last) || tlLetterViseme(last[0]);
-    v = { ...v, jaw: v.jaw + wobble };
-
-    tlApplyViseme(v);
-  }, 120);
-
-  // ⭐ 3) Ende → Mund schließen
+  // 2️⃣ Ende → Lipsync stoppen & Idle-Mund aktivieren
   u.onend = () => {
+    console.log("🛑 TTS END – lipsyncTimer cleared");
+
     if (lipsyncTimer) {
       clearInterval(lipsyncTimer);
       lipsyncTimer = null;
     }
 
     tlResetMouthToIdle();
-    tlActive = false;
+    tlActive = false;   // Idle-Mund erlaubt
     talking  = false;
 
     justFinishedSpeaking = true;
-    setTimeout(() => justFinishedSpeaking = false, 80);
+    setTimeout(() => { justFinishedSpeaking = false; }, 80);
   };
 
+  // 3️⃣ Start der TTS Ausgabe
   speechSynthesis.speak(u);
 }
 
