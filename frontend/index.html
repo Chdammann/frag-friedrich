@@ -483,23 +483,6 @@ function setMaleVoice() {
 speechSynthesis.onvoiceschanged = setMaleVoice;
 setMaleVoice();
 
-/* --------------------------------
-   WICHTIG: Diese Funktion muss
-   VOR speak() im Code stehen:
------------------------------------ */
-function setBlendshape(index, value) {
-  if (!model) return;
-  model.traverse(obj => {
-    if (obj.isMesh && obj.morphTargetInfluences && index !== null) {
-      obj.morphTargetInfluences[index] = value;
-    }
-  });
-}
-
-function lerp(a, b, t) {  // linearer Übergang
-  return a + (b - a) * t;
-}
-
 /* ----------------------------------------
    SPEAK – SYNCHRONE TTS + TEXT-LIPSYNC
 ---------------------------------------- */
