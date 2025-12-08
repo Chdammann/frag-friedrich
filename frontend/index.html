@@ -157,6 +157,22 @@ function setBlendshape(index, value) {
     }
   });
 }
+// --------------------------------------------------
+// Blendshape-Wert auslesen (Debug-Hilfsfunktion)
+// --------------------------------------------------
+function getBlendshape(index) {
+  if (!model || index === null) return 0;
+
+  let value = 0;
+
+  model.traverse(obj => {
+    if (obj.isMesh && obj.morphTargetInfluences) {
+      value = obj.morphTargetInfluences[index] ?? 0;
+    }
+  });
+
+  return value;
+}
 
 /* -----------------------------
    THREE.js SETUP
