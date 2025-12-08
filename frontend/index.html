@@ -516,8 +516,14 @@ function speak(text, slow = false) {
   u.rate = slow ? 0.85 : 1.05;
   u.pitch = 0.8;
 
+  // Stimme setzen
   if (maleVoice) {
     u.voice = maleVoice;
+  } else {
+    // Fallback: deutsche Stimme suchen
+    const voices = speechSynthesis.getVoices();
+    const v = voices.find(v => v.lang.startsWith("de"));
+    if (v) u.voice = v;
   }
 
   // 🔥 WICHTIG: talking aktivieren, bevor irgendwas startet
@@ -533,6 +539,10 @@ function speak(text, slow = false) {
 
   // 2️⃣ Wenn TTS endet → Mund schließen & talking beenden
   u.onend = () => {
+
+    // TTS ist fertig → Lipsync muss auch beendet sein
+    tlActive = false;
+
     talking = false;
     justFinishedSpeaking = true;
 
@@ -544,7 +554,6 @@ function speak(text, slow = false) {
   // 3️⃣ Jetzt wirklich sprechen
   speechSynthesis.speak(u);
 }
-
 /* -----------------------------
    RESIZE
 ----------------------------- */
