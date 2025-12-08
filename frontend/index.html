@@ -114,6 +114,8 @@ let talking = false, greeted = false;
 let mouthCooldown = false;          // 🆕 Anti-Zittern nach Sprachende
 let justFinishedSpeaking = false;   // mikro-Delay nach Speech-Ende
 
+let lipsyncTimer = null;   // Timer für Text-Lipsync während TTS
+
 // ⭐ NEU: verhindert recognition.start() Doppelklick-Fehler
 let recognizing = false;            // WICHTIG: global, nicht in resetMovements!
 
@@ -487,20 +489,29 @@ setMaleVoice();
    SPEAK – SYNCHRONE TTS + TEXT-LIPSYNC
 ---------------------------------------- */
 function speak(text, slow = false) {
+  if (!text) return;
 
-  // 🔥 Startflags setzen
-  talking = true;
-  tlActive = true;   // Idle sofort blockieren
+  // Falls noch ein alter Lipsync-Timer läuft → stoppen
+  if (lipsyncTimer) {
+    clearInterval(lipsyncTimer);
+    lipsyncTimer = null;
+  }
 
-  // Grobe TTS-Dauer berechnen
-  const baseSpeed = slow ? 200 : 160;
-  const textUnits = tlSplitIntoSyllables(text).length;
-  const estimatedDuration = textUnits * baseSpeed;
+  // 🔥 Statusflags
+  talking  = true;
+  tlActive = true;   // Idle-Mund blockieren, solange wir Lippen steuern
+
+  // Silben / Einheiten für Lipsync vorbereiten
+  const units = tlSplitIntoSyllables(text);
+  let idx = 0;
+
+  // Basisgeschwindigkeit für die Schritte
+  const baseStep = slow ? 220 : 170;   // etwas langsamer bei „Ähm… einen Moment“
 
   // TTS vorbereiten
   const u = new SpeechSynthesisUtterance(text);
-  u.lang = "de-DE";
-  u.rate = slow ? 0.85 : 1.05;
+  u.lang  = "de-DE";
+  u.rate  = slow ? 0.85 : 1.05;
   u.pitch = 0.8;
 
   // Stimme setzen
@@ -512,31 +523,56 @@ function speak(text, slow = false) {
     if (v) u.voice = v;
   }
 
-  // 1️⃣ TTS START → Text-Lipsync starten
+  // 1️⃣ Wenn TTS startet → Lipsync-Timer starten
   u.onstart = () => {
-    playTextLipsyncPro(text, { mode: "syllable", baseSpeed });
+    if (!units.length) return;
+
+    lipsyncTimer = setInterval(() => {
+      if (!units.length) return;
+
+      // aktuellen oder letzten Index nehmen
+      const currentIndex = Math.min(idx, units.length - 1);
+      const sylRaw = units[currentIndex];
+      if (!sylRaw) return;
+
+      const syl = sylRaw.trim();
+      if (!syl) return;
+
+      // Sonderlaute → sonst erster Buchstabe
+      const v = tlDetectSpecialVisemes(syl) || tlLetterViseme(syl[0]);
+      tlApplyViseme(v);
+
+      // langsam durch den Text iterieren
+      if (idx < units.length - 1) {
+        idx++;
+      }
+      // wenn idx >= units.length-1 ist, bleiben wir auf der letzten Silbe,
+      // bis TTS fertig ist → Mund bleibt lebendig, nicht komplett tot
+    }, baseStep);
   };
 
- u.onend = () => {
+  // 2️⃣ Wenn TTS endet → Timer stoppen & Mund in Idle zurück
+  u.onend = () => {
+    if (lipsyncTimer) {
+      clearInterval(lipsyncTimer);
+      lipsyncTimer = null;
+    }
 
-  // Mund sauber in Idle-Form bringen
-  tlResetMouthToIdle();
+    tlResetMouthToIdle();   // sanft in Ausgangsstellung
 
-  // Lipsync beenden → Idle darf wieder ran
-  tlActive = false;
+    tlActive = false;
+    talking  = false;
+    justFinishedSpeaking = true;
 
-  // TTS fertig
-  talking = false;
-  justFinishedSpeaking = true;
-
-  setTimeout(() => {
-    justFinishedSpeaking = false;
-  }, 80);
-};
+    setTimeout(() => {
+      justFinishedSpeaking = false;
+    }, 80);
+  };
 
   // 3️⃣ Jetzt wirklich sprechen
   speechSynthesis.speak(u);
 }
+
 
 /* -----------------------------
    RESIZE
