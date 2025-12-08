@@ -395,15 +395,27 @@ function animate() {
     model.rotation.x = THREE.MathUtils.lerp(model.rotation.x, baseRotX, 0.03);
   }
 
-  // ⭐ Blickbewegungen
+ // ⭐ Natürliche Blickbewegungen – aber NIE während Sprache(!)
+if (!talking && !tlActive && STATE !== "answer") {
+
   const driftX = Math.sin(now * 0.0012) * 0.05;
   const driftY = Math.sin(now * 0.0010) * 0.04;
 
-  model.rotation.x = THREE.MathUtils.lerp(model.rotation.x, baseRotX + driftX, 0.03);
+  model.rotation.x = THREE.MathUtils.lerp(
+    model.rotation.x,
+    baseRotX + driftX,
+    0.03
+  );
 
   if (!hmNeigen && !rising) {
-    model.rotation.y = THREE.MathUtils.lerp(model.rotation.y, model.rotation.y + driftY, 0.018);
+    model.rotation.y = THREE.MathUtils.lerp(
+      model.rotation.y,
+      model.rotation.y + driftY,
+      0.018
+    );
   }
+}
+
  // 🟡 IDLE-MUND – nur wenn absolut NICHTS mit Sprache aktiv ist
 if (!talking && !tlActive && !justFinishedSpeaking && !mouthCooldown && STATE !== "answer") {
 
