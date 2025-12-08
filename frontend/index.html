@@ -517,102 +517,80 @@ function warmupTTS() {
 }
 
 /* ----------------------------------------
-   SPEAK – SYNCHRONE TTS + TEXT-LIPSYNC
+   SPEAK – Chrome-stabiler TTS + Lipsync
 ---------------------------------------- */
 function speak(text, slow = false) {
   if (!text) return;
 
-  // WICHTIG: Chrome-TTS-Bugfix → Text verlängern
-  text = text + "‌";  // Zero-Width-Non-Joiner (unsichtbar!)
-
-  // Stimme noch nicht bereit → versuchen später
   if (!voiceReady) {
-    console.warn("⏳ Stimme noch nicht bereit – speak verzögert");
     setTimeout(() => speak(text, slow), 150);
     return;
   }
 
-  // Falls alter Lippen-Timer läuft → stoppen
+  // Sicherstellen, dass keine alten Timer weiterlaufen
   if (lipsyncTimer) {
     clearInterval(lipsyncTimer);
     lipsyncTimer = null;
   }
 
-  // 🔥 Flags
   talking  = true;
   tlActive = true;
 
-  // Silben vorbereiten
   const units = tlSplitIntoSyllables(text);
   let idx = 0;
 
-  // Geschwindigkeit pro Silbe → leicht reduziert (Fix 1)
-  const baseStep = slow ? 250 : 185;
-
-  // === TTS vorbereiten (Fix 1: rate reduziert) ===
+  // === TTS vorbereiten ===
   const u = new SpeechSynthesisUtterance(text);
   u.lang  = "de-DE";
-  u.rate  = slow ? 0.82 : 0.88;  // Chrome bricht sonst ab!
+  u.rate  = slow ? 0.85 : 0.94;   // Chrome-stabile Werte
   u.pitch = 0.85;
   u.voice = maleVoice;
 
-  // 1️⃣ START – Lipsync starten
-  u.onstart = () => {
-    if (!units.length) return;
+  // ⭐ 1) Chrome-stabile Lippenbewegung mit onboundary
+  u.onboundary = (ev) => {
+    if (ev.name !== "word" && ev.name !== "sentence") return;
 
-    lipsyncTimer = setInterval(() => {
+    if (idx >= units.length) idx = units.length - 1;
 
-      let currentIndex = idx;
+    const syl = units[idx].trim();
+    if (!syl) return;
 
-      // ⏳ Wenn wir das Ende erreicht haben → letzte Silbe "lebt weiter"
-      if (idx >= units.length) {
-        currentIndex = units.length - 1;
+    const v = tlDetectSpecialVisemes(syl) || tlLetterViseme(syl[0]);
+    tlApplyViseme(v);
 
-        const wobble = Math.sin(performance.now() * 0.012) * 0.10;
-        const lastSyl = units[currentIndex].trim();
-
-        let v = tlDetectSpecialVisemes(lastSyl) || tlLetterViseme(lastSyl[0]);
-        v = { ...v, jaw: v.jaw + wobble };
-
-        tlApplyViseme(v);
-        return;
-      }
-
-      // Normale Silbe
-      const sylRaw = units[currentIndex];
-      if (!sylRaw) return;
-
-      const syl = sylRaw.trim();
-      if (!syl) return;
-
-      const v = tlDetectSpecialVisemes(syl) || tlLetterViseme(syl[0]);
-      tlApplyViseme(v);
-
-      idx++;
-
-    }, baseStep);
+    idx++;
   };
 
-  // 2️⃣ ENDE – Lipsync stoppen & in Idle zurück
-  u.onend = () => {
-    console.log("🛑 TTS END – lipsyncTimer cleared");
+  // ⭐ 2) Wenn TTS zu schnell boundarys liefert → fallback: leichte Bewegung halten
+  lipsyncTimer = setInterval(() => {
+    if (!talking) return;
 
+    // Falls keine boundary mehr kommt → letzte Silbe lebendig halten
+    const last = units[Math.min(idx, units.length - 1)];
+    if (!last) return;
+
+    const wobble = Math.sin(performance.now() * 0.012) * 0.10;
+    let v = tlDetectSpecialVisemes(last) || tlLetterViseme(last[0]);
+    v = { ...v, jaw: v.jaw + wobble };
+
+    tlApplyViseme(v);
+  }, 120);
+
+  // ⭐ 3) Ende → Mund schließen
+  u.onend = () => {
     if (lipsyncTimer) {
       clearInterval(lipsyncTimer);
       lipsyncTimer = null;
     }
 
-    // sanfte Rückkehr
     tlResetMouthToIdle();
-
     tlActive = false;
     talking  = false;
 
     justFinishedSpeaking = true;
-    setTimeout(() => { justFinishedSpeaking = false; }, 80);
+    setTimeout(() => justFinishedSpeaking = false, 80);
   };
 
-  // 3️⃣ Start der TTS Ausgabe
   speechSynthesis.speak(u);
 }
 
