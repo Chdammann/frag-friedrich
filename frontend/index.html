@@ -517,35 +517,42 @@ function getBlendshape(index) {
 }
 
 /* ----------------------------------------
-   SPEAK – BROWSER-TTS + TEXT-LIPSYNC PRO
+   SPEAK – SYNCHRONE TTS + TEXT-LIPSYNC
 ---------------------------------------- */
 function speak(text, slow = false) {
 
-  // 1️⃣ Vor dem Sprechen: natürlichen Text-Lipsync starten
-  // (Silben, Sonderlaute, Lerp-Übergänge)
-  playTextLipsyncPro(text, { mode: "syllable", baseSpeed: slow ? 200 : 160 });
-
-  // 2️⃣ Jetzt Browser-TTS vorbereiten
+  // TTS vorbereiten
   const u = new SpeechSynthesisUtterance(text);
   u.lang = "de-DE";
   u.rate = slow ? 0.85 : 1.05;
   u.pitch = 0.8;
 
-  // männliche Stimme verwenden, wenn verfügbar
   if (maleVoice) {
     u.voice = maleVoice;
-  } else {
-    // fallback: deutsche Standard-Stimme etwas tiefer stellen
-    const voices = speechSynthesis.getVoices();
-    const femaleVoice = voices.find(v => v.name.includes("Deutsch"));
-    if (femaleVoice) {
-      u.voice = femaleVoice;
-      u.pitch = 0.6;
-      u.rate = 0.95;
-    }
   }
 
-  // 3️⃣ Sprechen starten (Audio)
+  // 🔥 WICHTIG: talking aktivieren, bevor irgendwas startet
+  talking = true;
+
+  // 1️⃣ Wenn TTS startet → Lipsync starten
+  u.onstart = () => {
+    playTextLipsyncPro(
+      text,
+      { mode: "syllable", baseSpeed: slow ? 200 : 160 }
+    );
+  };
+
+  // 2️⃣ Wenn TTS endet → Mund schließen & talking beenden
+  u.onend = () => {
+    talking = false;
+    justFinishedSpeaking = true;
+
+    setTimeout(() => {
+      justFinishedSpeaking = false;
+    }, 80);
+  };
+
+  // 3️⃣ Jetzt wirklich sprechen
   speechSynthesis.speak(u);
 }
 
