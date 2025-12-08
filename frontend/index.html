@@ -544,7 +544,7 @@ function speak(text, slow = false) {
   // === TTS vorbereiten ===
 const u = new SpeechSynthesisUtterance(text);
 u.lang  = "de-DE";
-u.rate  = slow ? 0.85 : 1.05;
+u.rate  = slow ? 0.8 : 0.92;
 u.pitch = 0.8;
 u.voice = maleVoice;
 
@@ -562,7 +562,7 @@ u.onstart = () => {
 
       // 🔥 NEU: leichte Variation auf der letzten Silbe,
       // damit der Mund weiter "lebt"
-      const wobble = Math.sin(performance.now() * 0.01) * 0.08;
+      const wobble = Math.sin(performance.now() * 0.012) * 0.12;
       const lastSyl = units[currentIndex].trim();
 
       let v = tlDetectSpecialVisemes(lastSyl) || tlLetterViseme(lastSyl[0]);
