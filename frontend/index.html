@@ -141,7 +141,19 @@ let baseY = 0;
 function resetMovements() {
   hmNeigen = false;
   rising   = false;
-  talking  = false;
+  // talking NICHT hier setzen!
+}
+/* --------------------------------------------------
+   BLENDSHAPE SETZEN – MUSS GLOBAL GANZ OBEN VERFÜGBAR SEIN
+-------------------------------------------------- */
+function setBlendshape(index, value) {
+  if (index === null || !model) return;
+
+  model.traverse(obj => {
+    if (obj.isMesh && obj.morphTargetInfluences) {
+      obj.morphTargetInfluences[index] = value;
+    }
+  });
 }
 
 /* -----------------------------
@@ -164,7 +176,7 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(window.devicePixelRatio);
 renderer.setClearColor(0x000000);
 
-/* LICHT – KORREKT */
+/* LICHT */
 const dirLight = new THREE.DirectionalLight(0xffffff, 2);
 dirLight.position.set(1, 1, 2);
 scene.add(dirLight);
@@ -184,7 +196,6 @@ loader.load("./avatar.glb", gltf => {
 
   model = gltf.scene;
 
-  // === Größe & Position – bleibt wie bisher ===
   const box = new THREE.Box3().setFromObject(model);
   const size = box.getSize(new THREE.Vector3());
   model.scale.setScalar((1.5 / Math.max(size.x, size.y, size.z)) * 0.8);
@@ -196,9 +207,6 @@ loader.load("./avatar.glb", gltf => {
   model.rotation.y = baseRotY - Math.PI / 2;
   model.rotation.x = baseRotX;
 
-  /* --------------------------------------------------
-     🔎 Blendshapes AUTOMATISCH FINDEN (saubere Variante)
-  -------------------------------------------------- */
   model.traverse(obj => {
     if (obj.isMesh && obj.morphTargetDictionary) {
       console.log("Mesh:", obj.name, obj.morphTargetDictionary);
@@ -209,8 +217,8 @@ loader.load("./avatar.glb", gltf => {
         if (lower.includes("jaw"))   jawOpenIndex = idx;
         if (lower.includes("wide"))  mouthWideIndex = idx;
         if (lower.includes("puck"))  mouthPuckerIndex = idx;
-        if (lower.includes("smile")) mouthSmileIndex = idx;  // 🆕 mouthSmile für „A“
-        if (lower.includes("frown")) mouthFrownIndex = idx;  // 🆕 mouthFrown für „O“, „M“, „P“
+        if (lower.includes("smile")) mouthSmileIndex = idx;
+        if (lower.includes("frown")) mouthFrownIndex = idx;
       }
     }
   });
@@ -219,26 +227,13 @@ loader.load("./avatar.glb", gltf => {
               "jawOpen =", jawOpenIndex,
               "| mouthWide =", mouthWideIndex,
               "| mouthPucker =", mouthPuckerIndex,
-              "| mouthSmile =", mouthSmileIndex,  // 🆕 Debugging
-              "| mouthFrown =", mouthFrownIndex);  // 🆕 Debugging
+              "| mouthSmile =", mouthSmileIndex,
+              "| mouthFrown =", mouthFrownIndex);
 
-  // === MODEL STARTEN ===
   scene.add(model);
   document.getElementById("loading").style.display = "none";
   animate();
 });
-  /* --------------------------------------------------
-   BLENDSHAPE SETZEN – GLOBAL & VOR SPEAK EINBINDEN!
--------------------------------------------------- */
-function setBlendshape(index, value) {
-  if (index === null || !model) return;
-
-  model.traverse(obj => {
-    if (obj.isMesh && obj.morphTargetInfluences) {
-      obj.morphTargetInfluences[index] = value;
-    }
-  });
-}
 
 /* -----------------------------
    STATE MACHINE – LOGIK (FINAL)
@@ -258,7 +253,7 @@ if ("webkitSpeechRecognition" in window) {
   // Aufnahme beendet:
   recognition.onend = () => {
 
-    // ⭐ WICHTIG: Recognition freigeben
+    // ⭐ Recognition freigeben
     recognizing = false;
 
     if (STATE === "listen" && lastTranscript) {
@@ -270,7 +265,6 @@ if ("webkitSpeechRecognition" in window) {
       hmStartTime = performance.now();
       speak("Ähm..... einen Moment", true);
 
-      // Mindestwartezeit einhalten:
       const MIN_HMMM = 4000;
       setTimeout(() => {
 
@@ -282,29 +276,24 @@ if ("webkitSpeechRecognition" in window) {
         .then(r => r.json())
         .then(data => {
 
-          // 2️⃣ ANTWORT BEGINNT → frontal
+          // 2️⃣ Antwort → frontal
           resetMovements();
           STATE = "answer";
           rising = true;
           riseStartTime = performance.now();
 
-          // ⭐ WICHTIG: talking NICHT VORHER setzen
-          // Das übernimmt speak() automatisch synchron
-          
-          // Antwort sprechen (Browser TTS + Text-Lipsync)
           speak(data.answer);
 
-          // 3️⃣ ANTWORT FERTIG → Rückkehr nach rechts
+          // 3️⃣ Antwortende → Rückkehr nach rechts
           const waitUntilDone = setInterval(() => {
 
-            // ⭐ Korrekt: Nur sprechen → talking
-            if (!talking && !rising) {
+            // ⭐ NEU: prüfen, ob TTS UND Text-Lipsync fertig
+            if (!talking && !tlActive && !rising) {
               clearInterval(waitUntilDone);
               resetMovements();
               greeted = false;
               STATE = "idle";
 
-              // ⭐ TRIGGER → block 4 aktiviert Rückkehr nach rechts
               toIdlePose = true;
               toIdleStart = performance.now();
             }
