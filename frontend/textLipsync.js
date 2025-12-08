@@ -1,7 +1,9 @@
 // ===============================
 // TEXT LIPSYNC PRO – SAFE MODULE
 // ===============================
-let tlActive = false;   // 🔥 nur EINMAL definiert – wichtig!
+
+// 🔥 Flag: Läuft gerade Text-Lipsync?
+let tlActive = false;
 
 // Kleine Hilfsfunktion für Pausen
 function tlSleep(ms) { return new Promise(r => setTimeout(r, ms)); }
@@ -12,11 +14,11 @@ function tlSleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 function tlLetterViseme(letter) {
   const l = letter.toLowerCase();
 
-  if ("aäe".includes(l)) return { jaw: 0.55, wide: 0.33, pucker: 0, frown: 0, smile: 0.15 };
-  if ("ouöü".includes(l)) return { jaw: 0.32, wide: 0.08, pucker: 0.65, frown: 0, smile: 0 };
-  if ("i".includes(l))    return { jaw: 0.2,  wide: 0.6,  pucker: 0, frown: 0, smile: 0.1 };
-  if ("mbp".includes(l)) return { jaw: 0.0,  wide: 0,    pucker: 0, frown: 0, smile: 0 };
-  if ("fv".includes(l))  return { jaw: 0.1,  wide: 0.05, pucker: 0, frown: 0.4, smile: 0 };
+  if ("aäe".includes(l)) return { jaw: 0.55, wide: 0.33, pucker: 0,    frown: 0,   smile: 0.15 };
+  if ("ouöü".includes(l)) return { jaw: 0.32, wide: 0.08, pucker: 0.65, frown: 0,   smile: 0 };
+  if ("i".includes(l))    return { jaw: 0.2,  wide: 0.6,  pucker: 0,    frown: 0,   smile: 0.1 };
+  if ("mbp".includes(l))  return { jaw: 0.0,  wide: 0,    pucker: 0,    frown: 0,   smile: 0 };
+  if ("fv".includes(l))   return { jaw: 0.1,  wide: 0.05, pucker: 0,    frown: 0.4, smile: 0 };
 
   return { jaw: 0.22, wide: 0.12, pucker: 0, frown: 0, smile: 0 };
 }
@@ -42,7 +44,8 @@ function tlDetectSpecialVisemes(syl) {
 // 3. Silbenzerlegung
 // --------------------------------------
 function tlSplitIntoSyllables(text) {
-  return text.toLowerCase()
+  return text
+    .toLowerCase()
     .replace(/[^a-zäöüß ]+/g, " ")
     .split(/\s+/)
     .filter(Boolean)
@@ -56,8 +59,10 @@ let tlBlendCache = {};
 
 function tlSmoothSet(index, target, factor = 0.55) {
   if (index == null || index < 0) return;
+
   const current = tlBlendCache[index] ?? 0;
   const next = current + (target - current) * factor;
+
   tlBlendCache[index] = next;
   setBlendshape(index, next);
 }
@@ -80,25 +85,22 @@ function tlResetMouthToIdle() {
 async function playTextLipsyncPro(text, options = {}) {
   if (!text || typeof text !== "string") return;
 
-  tlActive = true;   // 🔥 Start
+  // 🔥 START
+  tlActive = true;
 
   const mode      = options.mode      || "syllable";
   const baseSpeed = options.baseSpeed || 160;
 
   tlBlendCache = {};
 
-  const units =
-    mode === "letter"
-      ? text.split("")
-      : tlSplitIntoSyllables(text);
+  const units = mode === "letter" ? text.split("") : tlSplitIntoSyllables(text);
 
   for (const unit of units) {
     if (!unit) continue;
-
     const syl = unit.trim();
     if (!syl) continue;
 
-    let v = tlDetectSpecialVisemes(syl) || tlLetterViseme(syl[0]);
+    const v = tlDetectSpecialVisemes(syl) || tlLetterViseme(syl[0]);
     tlApplyViseme(v);
 
     let dur = baseSpeed;
@@ -108,7 +110,9 @@ async function playTextLipsyncPro(text, options = {}) {
   }
 
   tlResetMouthToIdle();
-  tlActive = false;  // 🔥 Ende
+
+  // 🔥 ENDE
+  tlActive = false;
 }
 
 // --------------------------------------
