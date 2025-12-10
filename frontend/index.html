@@ -59,23 +59,6 @@
     font-size:1.1em;
     text-align:center;
   }
-  footer {
-  position: absolute;
-  bottom: 20px;
-  width: 100%;
-  text-align: center;
-  color: #888; /* grau wie früher */
-  font-size: 0.9em;
-}
-
-footer a {
-  color: #888; /* Link ebenfalls grau */
-  text-decoration: none;
-}
-
-footer a:hover {
-  color: #bbb; /* leicht heller beim Hover */
-}
 </style>
 </head>
 
@@ -84,9 +67,6 @@ footer a:hover {
 <div id="loading">Avatar wird geladen…</div>
 <canvas id="avatarCanvas"></canvas>
 <button id="micBtn">🎤</button>
-<footer>
-© 2025 <a href="https://christoph-dammann.de" target="_blank">Dr. Christoph Dammann</a>
-</footer>
 
 <script src="https://cdn.jsdelivr.net/npm/three@0.146.0/build/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.146.0/examples/js/loaders/GLTFLoader.js"></script>
@@ -101,8 +81,6 @@ footer a:hover {
 let jawOpenIndex = null;
 let mouthWideIndex = null;
 let mouthPuckerIndex = null;
-let mouthSmileIndex = null;  // 🆕 NEU: mouthSmile für „A“
-let mouthFrownIndex = null;  // 🆕 NEU: mouthFrown für „O“, „M“, „P“
 
 // Audio / Analyse
 let audioCtx, analyser, src;
@@ -146,6 +124,7 @@ function resetMovements() {
   rising   = false;
   talking  = false;
 }
+
 /* -----------------------------
    THREE.js SETUP
 ----------------------------- */
@@ -211,8 +190,6 @@ loader.load("./avatar.glb", gltf => {
         if (lower.includes("jaw"))   jawOpenIndex = idx;
         if (lower.includes("wide"))  mouthWideIndex = idx;
         if (lower.includes("puck"))  mouthPuckerIndex = idx;
-        if (lower.includes("smile")) mouthSmileIndex = idx;  // 🆕 mouthSmile für „A“
-        if (lower.includes("frown")) mouthFrownIndex = idx;  // 🆕 mouthFrown für „O“, „M“, „P“
       }
     }
   });
@@ -220,9 +197,7 @@ loader.load("./avatar.glb", gltf => {
   console.log("✔ FINAL Blendshape-Indices:",
               "jawOpen =", jawOpenIndex,
               "| mouthWide =", mouthWideIndex,
-              "| mouthPucker =", mouthPuckerIndex,
-              "| mouthSmile =", mouthSmileIndex,  // 🆕 Debugging
-              "| mouthFrown =", mouthFrownIndex);  // 🆕 Debugging
+              "| mouthPucker =", mouthPuckerIndex);
 
   // === MODEL STARTEN ===
   scene.add(model);
@@ -242,6 +217,111 @@ function setBlendshape(index, value) {
   });
 }
 
+
+  // ====================================
+// ANIMATE – FINAL & STABLE
+// ====================================
+function animate() {
+  requestAnimationFrame(animate);
+  if (!model) return;
+
+  // 🧊 Nur Idle, wenn NICHT gerade frisch gesprochen wurde:
+  if (!talking && !justFinishedSpeaking && !mouthCooldown) {
+      setBlendshape(jawOpenIndex, 0.05);  // dezente Atmung
+      setBlendshape(mouthWideIndex, 0.0);
+      setBlendshape(mouthPuckerIndex, 0.0);
+  }
+
+  const now = performance.now();
+  const frontalY = -Math.PI / 2;               // frontal
+  const rightY   = baseRotY - Math.PI / 2;     // Startpose rechts
+  const leftY    = frontalY + 0.25;            // Hmmm = leicht links
+
+  // 0️⃣ START: Ausgangsposition (leicht rechts)
+  if (frontalFix) {
+    model.rotation.y = THREE.MathUtils.lerp(model.rotation.y, rightY, 0.08);
+    model.rotation.x = THREE.MathUtils.lerp(model.rotation.x, baseRotX, 0.08);
+    renderer.render(scene, camera);
+    return;
+  }
+
+
+  // 1️⃣ GREET / ANTWORTBEGINN → FRONTAL
+  if (rising) {
+    const t = (now - riseStartTime) / riseDuration;
+    model.rotation.y = THREE.MathUtils.lerp(model.rotation.y, frontalY, 0.06);
+    model.rotation.x = THREE.MathUtils.lerp(model.rotation.x, 0, 0.06);
+    if (t >= 1) rising = false;
+  }
+
+  // 2️⃣ HMMM → LANGSAM LINKS
+  else if (hmNeigen) {
+    const t = Math.min(1, (now - hmStartTime) / hmDuration);
+    model.rotation.x = THREE.MathUtils.lerp(model.rotation.x, baseRotX + 0.25, t);
+    model.rotation.y = THREE.MathUtils.lerp(model.rotation.y, leftY, t);
+  }
+
+  // 3️⃣ ANTWORT → FRONTAL
+  else if (STATE === "answer") {
+    model.position.y = baseY + Math.sin(now * 0.0015) * 0.008;
+    model.rotation.y = THREE.MathUtils.lerp(model.rotation.y, frontalY, 0.03);
+    model.rotation.x = THREE.MathUtils.lerp(model.rotation.x, 0, 0.03);
+  }
+
+  // 4️⃣ TALKING = SPRICHT → FRONTAL & ATMEN
+  else if (talking) {
+    model.position.y = baseY + Math.sin(now * 0.0015) * 0.008;
+    model.rotation.y = THREE.MathUtils.lerp(model.rotation.y, frontalY, 0.03);
+    model.rotation.x = THREE.MathUtils.lerp(model.rotation.x, 0, 0.03);
+  }
+
+  // 5️⃣ WARTET AUF FRAGE → FRONTAL
+  else if (STATE === "listen" || STATE === "greet") {
+    model.position.y = baseY + Math.sin(now * 0.0012) * 0.006;
+    model.rotation.y = THREE.MathUtils.lerp(model.rotation.y, frontalY, 0.03);
+    model.rotation.x = THREE.MathUtils.lerp(model.rotation.x, 0, 0.03);
+  }
+
+  // 6️⃣ ENDE → SANFT ZURÜCK NACH RECHTS
+else if (STATE === "idle" && !talking && !rising) {
+  const breathSpeed = 0.0011 + Math.sin(now * 0.00005) * 0.0004;
+  const breathAmp   = 0.006  + Math.sin(now * 0.00008) * 0.003;
+  model.position.y  = baseY + Math.sin(now * breathSpeed) * breathAmp;
+
+  model.rotation.y = THREE.MathUtils.lerp(model.rotation.y, rightY, 0.03);
+  model.rotation.x = THREE.MathUtils.lerp(model.rotation.x, baseRotX, 0.03);
+}
+
+// ⭐ Sichtbare, natürliche Blickbewegungen – Version 2 (mehr Dynamik!)
+const driftX = Math.sin(now * 0.0012) * 0.05;   // klar sichtbares Nicken
+const driftY = Math.sin(now * 0.0010) * 0.04;   // klar seitlich „denken“
+
+// X-Achse → Richtung baseRotX + Variation
+model.rotation.x = THREE.MathUtils.lerp(
+  model.rotation.x,
+  baseRotX + driftX,
+  0.03          // schnellere Reaktion
+);
+
+// Y-Achse → nur wenn kein Hmmm aktiv (NICHT Antwort unterbrechen!)
+if (!hmNeigen && !rising) {
+  model.rotation.y = THREE.MathUtils.lerp(
+    model.rotation.y,
+    model.rotation.y + driftY,
+    0.018
+  );
+}
+ // 🟢 OpenAI TTS / SpeechSynthesis steuern Lippen
+// Animate greift NICHT ein, solange talking = true!
+if (!talking) {
+  // hier nur Idle-Mundhaltung, sobald NICHT gesprochen wird:
+  setBlendshape(jawOpenIndex, 0.1);  // leicht offen (Atmung)
+  setBlendshape(mouthWideIndex, 0);
+  setBlendshape(mouthPuckerIndex, 0);
+}
+renderer.render(scene, camera);
+}
+  
 /* -----------------------------
    STATE MACHINE – LOGIK (FINAL)
 ----------------------------- */
@@ -330,116 +410,7 @@ fetch("/tts", {
     }
   };
 }
-  
-// ====================================
-// ANIMATE – FINAL & STABLE
-// ====================================
-function animate() {
-  requestAnimationFrame(animate);
-  if (!model) return;
-
-  // 🧊 Nur Idle, wenn NICHT gerade frisch gesprochen wurde:
-  if (!talking && !justFinishedSpeaking && !mouthCooldown) {
-      setBlendshape(jawOpenIndex, 0.05);  // dezente Atmung
-      setBlendshape(mouthWideIndex, 0.0);
-      setBlendshape(mouthPuckerIndex, 0.0);
-      setBlendshape(mouthSmileIndex, 0);  // 🆕 reset mouthSmile
-      setBlendshape(mouthFrownIndex, 0);  // 🆕 reset mouthFrown
-  }
-
-  const now = performance.now();
-  const frontalY = -Math.PI / 2;               // frontal
-  const rightY   = baseRotY - Math.PI / 2;     // Startpose rechts
-  const leftY    = frontalY + 0.25;            // Hmmm = leicht links
-
-  // 0️⃣ START: Ausgangsposition (leicht rechts)
-  if (frontalFix) {
-    model.rotation.y = THREE.MathUtils.lerp(model.rotation.y, rightY, 0.08);
-    model.rotation.x = THREE.MathUtils.lerp(model.rotation.x, baseRotX, 0.08);
-    renderer.render(scene, camera);
-    return;
-  }
-
-  // 1️⃣ GREET / ANTWORTBEGINN → FRONTAL
-  if (rising) {
-    const t = (now - riseStartTime) / riseDuration;
-    model.rotation.y = THREE.MathUtils.lerp(model.rotation.y, frontalY, 0.06);
-    model.rotation.x = THREE.MathUtils.lerp(model.rotation.x, 0, 0.06);
-    if (t >= 1) rising = false;
-  }
-
-  // 2️⃣ HMMM → LANGSAM LINKS
-  else if (hmNeigen) {
-    const t = Math.min(1, (now - hmStartTime) / hmDuration);
-    model.rotation.x = THREE.MathUtils.lerp(model.rotation.x, baseRotX + 0.25, t);
-    model.rotation.y = THREE.MathUtils.lerp(model.rotation.y, leftY, t);
-  }
-
-  // 3️⃣ ANTWORT → FRONTAL
-  else if (STATE === "answer") {
-    model.position.y = baseY + Math.sin(now * 0.0015) * 0.008;
-    model.rotation.y = THREE.MathUtils.lerp(model.rotation.y, frontalY, 0.03);
-    model.rotation.x = THREE.MathUtils.lerp(model.rotation.x, 0, 0.03);
-  }
-
-  // 4️⃣ TALKING = SPRICHT → FRONTAL & ATMEN
-  else if (talking) {
-    model.position.y = baseY + Math.sin(now * 0.0015) * 0.008;
-    model.rotation.y = THREE.MathUtils.lerp(model.rotation.y, frontalY, 0.03);
-    model.rotation.x = THREE.MathUtils.lerp(model.rotation.x, 0, 0.03);
-  }
-
-  // 5️⃣ WARTET AUF FRAGE → FRONTAL
-  else if (STATE === "listen" || STATE === "greet") {
-    model.position.y = baseY + Math.sin(now * 0.0012) * 0.006;
-    model.rotation.y = THREE.MathUtils.lerp(model.rotation.y, frontalY, 0.03);
-    model.rotation.x = THREE.MathUtils.lerp(model.rotation.x, 0, 0.03);
-  }
-
-  // 6️⃣ ENDE → SANFT ZURÜCK NACH RECHTS
-  else if (STATE === "idle" && !talking && !rising) {
-    const breathSpeed = 0.0011 + Math.sin(now * 0.00005) * 0.0004;
-    const breathAmp   = 0.006  + Math.sin(now * 0.00008) * 0.003;
-    model.position.y  = baseY + Math.sin(now * breathSpeed) * breathAmp;
-
-    model.rotation.y = THREE.MathUtils.lerp(model.rotation.y, rightY, 0.03);
-    model.rotation.x = THREE.MathUtils.lerp(model.rotation.x, baseRotX, 0.03);
-  }
-
-  // ⭐ Sichtbare, natürliche Blickbewegungen – Version 2 (mehr Dynamik!)
-  const driftX = Math.sin(now * 0.0012) * 0.05;   // klar sichtbares Nicken
-  const driftY = Math.sin(now * 0.0010) * 0.04;   // klar seitlich „denken“
-
-  // X-Achse → Richtung baseRotX + Variation
-  model.rotation.x = THREE.MathUtils.lerp(
-    model.rotation.x,
-    baseRotX + driftX,
-    0.03          // schnellere Reaktion
-  );
-
-  // Y-Achse → nur wenn kein Hmmm aktiv (NICHT Antwort unterbrechen!)
-  if (!hmNeigen && !rising) {
-    model.rotation.y = THREE.MathUtils.lerp(
-      model.rotation.y,
-      model.rotation.y + driftY,
-      0.018
-    );
-  }
-
-  // 🟢 OpenAI TTS / SpeechSynthesis steuern Lippen
-  // Animate greift NICHT ein, solange talking = true!
-  if (!talking) {
-    // hier nur Idle-Mundhaltung, sobald NICHT gesprochen wird:
-    setBlendshape(jawOpenIndex, 0.1);  // leicht offen (Atmung)
-    setBlendshape(mouthWideIndex, 0);
-    setBlendshape(mouthPuckerIndex, 0);
-    setBlendshape(mouthSmileIndex, 0);  // 🆕 reset mouthSmile
-    setBlendshape(mouthFrownIndex, 0);  // 🆕 reset mouthFrown
-  }
-
-  renderer.render(scene, camera);
-}
-  /* -----------------------------
+   /* -----------------------------
    BUTTON – GREET & LISTEN
 ----------------------------- */
 document.getElementById("micBtn").onclick = () => {
@@ -504,7 +475,6 @@ function setBlendshape(index, value) {
     }
   });
 }
-
 function lerp(a, b, t) {  // linearer Übergang
   return a + (b - a) * t;
 }
@@ -526,106 +496,57 @@ function speak(text, slow = false) {
   const u = new SpeechSynthesisUtterance(text);
   u.lang = "de-DE";
   u.rate = slow ? 0.75 : 1.1;
+  if (maleVoice) u.voice = maleVoice;
 
-  // Verwende männliche Stimme, wenn verfügbar
-  if (maleVoice) {
-    u.voice = maleVoice;
-  } else {
-    // Wenn männliche Stimme nicht verfügbar, verwende weibliche Stimme und setze Pitch tiefer
-    let voices = speechSynthesis.getVoices();
-    let femaleVoice = voices.find(v => v.name === "Google Deutsch");
+  let lipsyncInterval = null;
+  let t = 0;
 
-    if (femaleVoice) {
-      u.voice = femaleVoice;
-      u.rate = 0.8;
-      u.pitch = -1; // Tieferer Ton für die weibliche Stimme, um sie "männlicher" klingen zu lassen
-    }
-  }
+  u.onstart = () => {
+    talking = true;
+    mouthCooldown = false;
+    justFinishedSpeaking = false;
 
-let lipsyncInterval = null;
+    lipsyncInterval = setInterval(() => {
+      t += slow ? 0.05 : 0.1;
 
-let bs = {
-  jaw:        { current: 0, target: 0 },
-  wide:       { current: 0, target: 0 },
-  pucker:     { current: 0, target: 0 },
-  smile:      { current: 0, target: 0 },
-  frown:      { current: 0, target: 0 }
-};
+      let jaw = Math.abs(Math.sin(t)) * 0.45;
+      jaw += (Math.random() * 0.12 - 0.06);
+      jaw = Math.min(Math.max(jaw, 0), 0.45);
+      if (Math.random() < 0.03) jaw *= 0.25;
 
-u.onstart = () => {
-  talking = true;
+      const wide = jaw * 0.32;
+      const puck = jaw * 0.18;
 
-  lipsyncInterval = setInterval(() => {
-
-    // 🟢 1) Würdevoller Sprecher = weniger, aber deutliche Impulse
-    // Hauptzielwerte wie vorher
-    if (Math.random() < 0.10) bs.jaw.target = Math.random() * 0.55;
-
-    // 🔧 NEU: Häufige kurze Mikro-Schließungen (0–12%)
-    if (Math.random() < 0.18) bs.jaw.target = Math.random() * 0.12;
-
-    if (Math.random() < 0.07) bs.wide.target   = Math.random() * 0.35;
-    if (Math.random() < 0.05) bs.pucker.target = Math.random() * 0.30;
-    if (Math.random() < 0.06) bs.smile.target  = Math.random() * 0.18;
-    if (Math.random() < 0.06) bs.frown.target  = Math.random() * 0.22;
-
-    // 🟢 2) Sanftere, gleichmäßigere Übergänge
-    bs.jaw.current    += (bs.jaw.target    - bs.jaw.current)    * 0.33;
-    bs.wide.current   += (bs.wide.target   - bs.wide.current)   * 0.25;
-    bs.pucker.current += (bs.pucker.target - bs.pucker.current) * 0.28;
-    bs.smile.current  += (bs.smile.target  - bs.smile.current)  * 0.20;
-    bs.frown.current  += (bs.frown.target  - bs.frown.current)  * 0.23;
-
-    // 🟢 3) Leiser Drift, würdevoll ruhig, ohne Hektik
-    bs.jaw.current    += (Math.random() * 0.02 - 0.01);
-    bs.wide.current   += (Math.random() * 0.012 - 0.006);
-    bs.pucker.current += (Math.random() * 0.012 - 0.006);
-    bs.smile.current  += (Math.random() * 0.01 - 0.005);
-    bs.frown.current  += (Math.random() * 0.01 - 0.005);
-
-    // 🟢 4) Grenzen – leicht angepasst für natürliche Schließungen
-    bs.jaw.current    = Math.min(Math.max(bs.jaw.current,    0.02), 0.55);
-    bs.wide.current   = Math.min(Math.max(bs.wide.current,   0),     0.38);
-    bs.pucker.current = Math.min(Math.max(bs.pucker.current, 0),     0.32);
-    bs.smile.current  = Math.min(Math.max(bs.smile.current,  0),     0.20);
-    bs.frown.current  = Math.min(Math.max(bs.frown.current,  0),     0.25);
-
-    // 🟢 5) Finales Setzen der Blendshapes
-    setBlendshape(jawOpenIndex,      bs.jaw.current);
-    setBlendshape(mouthWideIndex,    bs.wide.current);
-    setBlendshape(mouthPuckerIndex,  bs.pucker.current);
-    setBlendshape(mouthSmileIndex,   bs.smile.current);
-    setBlendshape(mouthFrownIndex,   bs.frown.current);
-
-  }, 33);
-};
-  u.onend = () => {
-    clearInterval(lipsyncInterval);
-    lipsyncInterval = null;
-    talking = false;
-
-    // Sofort in Idle
-    setBlendshape(jawOpenIndex, 0.05);
-    setBlendshape(mouthWideIndex, 0);
-    setBlendshape(mouthPuckerIndex, 0);
-    setBlendshape(mouthSmileIndex, 0);  // reset mouthSmile
-    setBlendshape(mouthFrownIndex, 0);  // reset mouthFrown
-
-    // Cooldown für animate(), aber micro-delay!
-    justFinishedSpeaking = true;
-    mouthCooldown = true;
-
-    // ⏱ dieser Trick killt das Geister-Zittern:
-    setTimeout(() => {
-      justFinishedSpeaking = false;
-      mouthCooldown = false;
-    }, 20); // nur 20ms → fühlbar, aber unsichtbar
+      setBlendshape(jawOpenIndex, jaw);
+      setBlendshape(mouthWideIndex, wide);
+      setBlendshape(mouthPuckerIndex, puck);
+    }, 38);
   };
+
+u.onend = () => {
+  clearInterval(lipsyncInterval);
+  lipsyncInterval = null;
+  talking = false;
+
+  // Sofort in Idle
+  setBlendshape(jawOpenIndex, 0.05);
+  setBlendshape(mouthWideIndex, 0);
+  setBlendshape(mouthPuckerIndex, 0);
+
+  // Cooldown für animate(), aber micro-delay!
+  justFinishedSpeaking = true;
+  mouthCooldown = true;
+
+  // ⏱ dieser Trick killt das Geister-Zittern:
+  setTimeout(() => {
+    justFinishedSpeaking = false;
+    mouthCooldown = false;
+  }, 20); // nur 20ms → fühlbar, aber unsichtbar
+};
 
   // GANZ WICHTIG!
   speechSynthesis.speak(u);
 }  // <== ENDE SPEAK – Klammern stimmen!
-
 
 /* -----------------------------
    RESIZE
