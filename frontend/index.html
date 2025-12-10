@@ -146,14 +146,6 @@ function resetMovements() {
   rising   = false;
   talking  = false;
 }
-  function closeMouth() {
-  setBlendshape(jawOpenIndex, 0);
-  setBlendshape(mouthWideIndex, 0);
-  setBlendshape(mouthPuckerIndex, 0);
-  setBlendshape(mouthSmileIndex, 0);
-  setBlendshape(mouthFrownIndex, 0);
-}
-
 /* -----------------------------
    THREE.js SETUP
 ----------------------------- */
@@ -264,20 +256,6 @@ if ("webkitSpeechRecognition" in window) {
   recognition.onresult = e => {
     lastTranscript = e.results[0][0].transcript;
   };
-  // ----------------------------------
-// SICHERER RECOGNITION-START
-// ----------------------------------
-function safeStartRecognition() {
-  try { recognition.stop(); } catch(e) {}
-
-  setTimeout(() => {
-    try { 
-      recognition.start();   // ✔ richtig
-    } catch(e) {
-      console.warn("🎤 Recognition start verhindert (lief schon)");
-    }
-  }, 80);
-}
 
   // Aufnahme beendet:
   recognition.onend = () => {
@@ -353,26 +331,26 @@ fetch("/tts", {
   };
 }
   
-//// ====================================
-// ANIMATE – FINAL & STABLE (mit Fixes)
+// ====================================
+// ANIMATE – FINAL & STABLE
 // ====================================
 function animate() {
   requestAnimationFrame(animate);
   if (!model) return;
 
-  // 🧊 Idle-Mundhaltung NUR wenn kein Sprechen & kein Cooldown
-  if (!talking && !mouthCooldown) {    // ← justFinishedSpeaking entfernt (Fix)
-      setBlendshape(jawOpenIndex, 0.05); 
+  // 🧊 Nur Idle, wenn NICHT gerade frisch gesprochen wurde:
+  if (!talking && !justFinishedSpeaking && !mouthCooldown) {
+      setBlendshape(jawOpenIndex, 0.05);  // dezente Atmung
       setBlendshape(mouthWideIndex, 0.0);
       setBlendshape(mouthPuckerIndex, 0.0);
-      setBlendshape(mouthSmileIndex, 0);
-      setBlendshape(mouthFrownIndex, 0);
+      setBlendshape(mouthSmileIndex, 0);  // 🆕 reset mouthSmile
+      setBlendshape(mouthFrownIndex, 0);  // 🆕 reset mouthFrown
   }
 
   const now = performance.now();
-  const frontalY = -Math.PI / 2;
-  const rightY   = baseRotY - Math.PI / 2;
-  const leftY    = frontalY + 0.25;
+  const frontalY = -Math.PI / 2;               // frontal
+  const rightY   = baseRotY - Math.PI / 2;     // Startpose rechts
+  const leftY    = frontalY + 0.25;            // Hmmm = leicht links
 
   // 0️⃣ START: Ausgangsposition (leicht rechts)
   if (frontalFix) {
@@ -428,16 +406,18 @@ function animate() {
     model.rotation.x = THREE.MathUtils.lerp(model.rotation.x, baseRotX, 0.03);
   }
 
-  // ⭐ Blickbewegungen
-  const driftX = Math.sin(now * 0.0012) * 0.05;
-  const driftY = Math.sin(now * 0.0010) * 0.04;
+  // ⭐ Sichtbare, natürliche Blickbewegungen – Version 2 (mehr Dynamik!)
+  const driftX = Math.sin(now * 0.0012) * 0.05;   // klar sichtbares Nicken
+  const driftY = Math.sin(now * 0.0010) * 0.04;   // klar seitlich „denken“
 
+  // X-Achse → Richtung baseRotX + Variation
   model.rotation.x = THREE.MathUtils.lerp(
     model.rotation.x,
     baseRotX + driftX,
-    0.03
+    0.03          // schnellere Reaktion
   );
 
+  // Y-Achse → nur wenn kein Hmmm aktiv (NICHT Antwort unterbrechen!)
   if (!hmNeigen && !rising) {
     model.rotation.y = THREE.MathUtils.lerp(
       model.rotation.y,
@@ -446,13 +426,16 @@ function animate() {
     );
   }
 
-  // 🟢 (WICHTIG!) Der alte zweite Idle-Mundblock wurde ENTFERNT.
-  //    Er war die Ursache für die SpeechRecognition-Blockade.
-  //
-  //    Es kommt zu KEINEM Nachklappern, weil:
-  //    - closeMouth() sauber schließt
-  //    - der obere Idle-Block präzise arbeitet
-  //    - mouthCooldown Idle-Resets korrekt verzögert
+  // 🟢 OpenAI TTS / SpeechSynthesis steuern Lippen
+  // Animate greift NICHT ein, solange talking = true!
+  if (!talking) {
+    // hier nur Idle-Mundhaltung, sobald NICHT gesprochen wird:
+    setBlendshape(jawOpenIndex, 0.1);  // leicht offen (Atmung)
+    setBlendshape(mouthWideIndex, 0);
+    setBlendshape(mouthPuckerIndex, 0);
+    setBlendshape(mouthSmileIndex, 0);  // 🆕 reset mouthSmile
+    setBlendshape(mouthFrownIndex, 0);  // 🆕 reset mouthFrown
+  }
 
   renderer.render(scene, camera);
 }
@@ -461,10 +444,8 @@ function animate() {
 ----------------------------- */
 document.getElementById("micBtn").onclick = () => {
 
-  // 1️⃣ Erste Betätigung → Begrüßung
+  // Erste Betätigung → Begrüßung
   if (!greeted) {
-    try { recognition.stop(); } catch(e) {}
-
     resetMovements();
     greeted = true;
     STATE = "greet";
@@ -480,7 +461,7 @@ document.getElementById("micBtn").onclick = () => {
     return;
   }
 
-  // 2️⃣ Spätere Betätigung → Spracherkennung starten
+  // Spätere Betätigung → Spracherkennung starten
   if (!recognition) {
     alert("Spracherkennung wird nicht unterstützt.");
     return;
@@ -488,14 +469,9 @@ document.getElementById("micBtn").onclick = () => {
 
   resetMovements();
   lastTranscript = "";
-
-  // ⛔ WICHTIG: Erkennen in definierten Zustand setzen
-  recognition.onend = null; 
-
   STATE = "listen";
-  safeStartRecognition();   // ✔ sicherer Start
+  recognition.start();
 };
-
 /* -----------------------------
    1) MÄNNLICHE STIMME FEST SETZEN  (GLOBAL!)
 ----------------------------- */
@@ -562,96 +538,95 @@ function speak(text, slow = false) {
     if (femaleVoice) {
       u.voice = femaleVoice;
       u.rate = 0.8;
-      u.pitch = -1; 
+      u.pitch = -1; // Tieferer Ton für die weibliche Stimme, um sie "männlicher" klingen zu lassen
     }
   }
 
-  let lipsyncInterval = null;
+let lipsyncInterval = null;
 
-  let bs = {
-    jaw:        { current: 0, target: 0 },
-    wide:       { current: 0, target: 0 },
-    pucker:     { current: 0, target: 0 },
-    smile:      { current: 0, target: 0 },
-    frown:      { current: 0, target: 0 }
-  };
+let bs = {
+  jaw:        { current: 0, target: 0 },
+  wide:       { current: 0, target: 0 },
+  pucker:     { current: 0, target: 0 },
+  smile:      { current: 0, target: 0 },
+  frown:      { current: 0, target: 0 }
+};
 
-  u.onstart = () => {
-    talking = true;
+u.onstart = () => {
+  talking = true;
 
-    lipsyncInterval = setInterval(() => {
+  lipsyncInterval = setInterval(() => {
 
-      // 🟢 1) Würdevoller Sprecher = weniger, aber deutliche Impulse
-      if (Math.random() < 0.10) bs.jaw.target = Math.random() * 0.55;
+    // 🟢 1) Würdevoller Sprecher = weniger, aber deutliche Impulse
+    // Hauptzielwerte wie vorher
+    if (Math.random() < 0.10) bs.jaw.target = Math.random() * 0.55;
 
-      // 🔧 Mikro-Schließungen
-      if (Math.random() < 0.18) bs.jaw.target = Math.random() * 0.12;
+    // 🔧 NEU: Häufige kurze Mikro-Schließungen (0–12%)
+    if (Math.random() < 0.18) bs.jaw.target = Math.random() * 0.12;
 
-      if (Math.random() < 0.07) bs.wwide.target   = Math.random() * 0.35;
-      if (Math.random() < 0.05) bs.pucker.target = Math.random() * 0.30;
-      if (Math.random() < 0.06) bs.smile.target  = Math.random() * 0.18;
-      if (Math.random() < 0.06) bs.frown.target  = Math.random() * 0.22;
+    if (Math.random() < 0.07) bs.wide.target   = Math.random() * 0.35;
+    if (Math.random() < 0.05) bs.pucker.target = Math.random() * 0.30;
+    if (Math.random() < 0.06) bs.smile.target  = Math.random() * 0.18;
+    if (Math.random() < 0.06) bs.frown.target  = Math.random() * 0.22;
 
-      // 🟢 2) Sanfte Übergänge
-      bs.jaw.current    += (bs.jaw.target    - bs.jaw.current)    * 0.33;
-      bs.wide.current   += (bs.wide.target   - bs.wide.current)   * 0.25;
-      bs.pucker.current += (bs.pucker.target - bs.pucker.current) * 0.28;
-      bs.smile.current  += (bs.smile.target  - bs.smile.current   ) * 0.20;
-      bs.frown.current  += (bs.frown.target  - bs.frown.current   ) * 0.23;
+    // 🟢 2) Sanftere, gleichmäßigere Übergänge
+    bs.jaw.current    += (bs.jaw.target    - bs.jaw.current)    * 0.33;
+    bs.wide.current   += (bs.wide.target   - bs.wide.current)   * 0.25;
+    bs.pucker.current += (bs.pucker.target - bs.pucker.current) * 0.28;
+    bs.smile.current  += (bs.smile.target  - bs.smile.current)  * 0.20;
+    bs.frown.current  += (bs.frown.target  - bs.frown.current)  * 0.23;
 
-      // 🟢 3) Leichter Drift
-      bs.jaw.current    += (Math.random() * 0.02 - 0.01);
-      bs.wide.current   += (Math.random() * 0.012 - 0.006);
-      bs.pucker.current += (Math.random() * 0.012 - 0.006);
-      bs.smile.current  += (Math.random() * 0.01  - 0.005);
-      bs.frown.current  += (Math.random() * 0.01  - 0.005);
+    // 🟢 3) Leiser Drift, würdevoll ruhig, ohne Hektik
+    bs.jaw.current    += (Math.random() * 0.02 - 0.01);
+    bs.wide.current   += (Math.random() * 0.012 - 0.006);
+    bs.pucker.current += (Math.random() * 0.012 - 0.006);
+    bs.smile.current  += (Math.random() * 0.01 - 0.005);
+    bs.frown.current  += (Math.random() * 0.01 - 0.005);
 
-      // 🟢 4) Begrenzungen
-      bs.jaw.current    = Math.min(Math.max(bs.jaw.current,    0.02), 0.55);
-      bs.wide.current   = Math.min(Math.max(bs.wide.current,   0),     0.38);
-      bs.pucker.current = Math.min(Math.max(bs.pucker.current, 0),     0.32);
-      bs.smile.current  = Math.min(Math.max(bs.smile.current,  0),     0.20);
-      bs.frown.current  = Math.min(Math.max(bs.frown.current,  0),     0.25);
+    // 🟢 4) Grenzen – leicht angepasst für natürliche Schließungen
+    bs.jaw.current    = Math.min(Math.max(bs.jaw.current,    0.02), 0.55);
+    bs.wide.current   = Math.min(Math.max(bs.wide.current,   0),     0.38);
+    bs.pucker.current = Math.min(Math.max(bs.pucker.current, 0),     0.32);
+    bs.smile.current  = Math.min(Math.max(bs.smile.current,  0),     0.20);
+    bs.frown.current  = Math.min(Math.max(bs.frown.current,  0),     0.25);
 
-      // 🟢 5) Blendshapes setzen
-      setBlendshape(jawOpenIndex,      bs.jaw.current);
-      setBlendshape(mouthWideIndex,    bs.wide.current);
-      setBlendshape(mouthPuckerIndex,  bs.pucker.current);
-      setBlendshape(mouthSmileIndex,   bs.smile.current);
-      setBlendshape(mouthFrownIndex,   bs.frown.current);
+    // 🟢 5) Finales Setzen der Blendshapes
+    setBlendshape(jawOpenIndex,      bs.jaw.current);
+    setBlendshape(mouthWideIndex,    bs.wide.current);
+    setBlendshape(mouthPuckerIndex,  bs.pucker.current);
+    setBlendshape(mouthSmileIndex,   bs.smile.current);
+    setBlendshape(mouthFrownIndex,   bs.frown.current);
 
-    }, 33);
-  };
-
+  }, 33);
+};
   u.onend = () => {
-    clearInterval(lipsyncInterval);   // Stoppe Lippenbewegungsintervall
+    clearInterval(lipsyncInterval);
     lipsyncInterval = null;
     talking = false;
 
-    // ⭐ ⭐ ⭐ MUND NACH TTS SAUBER SCHLIESSEN ⭐ ⭐ ⭐
-    closeMouth();
-
-    // Sofort alle Blendshapes zurücksetzen, um Restbewegungen zu vermeiden
-    setBlendshape(jawOpenIndex, 0.1);  // Leicht geöffnet
+    // Sofort in Idle
+    setBlendshape(jawOpenIndex, 0.05);
     setBlendshape(mouthWideIndex, 0);
     setBlendshape(mouthPuckerIndex, 0);
-    setBlendshape(mouthSmileIndex, 0);
-    setBlendshape(mouthFrownIndex, 0);
+    setBlendshape(mouthSmileIndex, 0);  // reset mouthSmile
+    setBlendshape(mouthFrownIndex, 0);  // reset mouthFrown
 
-    // Cooldown für animate(), verhindert Idle-Klappern
+    // Cooldown für animate(), aber micro-delay!
     justFinishedSpeaking = true;
     mouthCooldown = true;
 
-    // Kleiner Delay, dann ist alles sauber
+    // ⏱ dieser Trick killt das Geister-Zittern:
     setTimeout(() => {
-        justFinishedSpeaking = false;
-        mouthCooldown = false;
-    }, 100);
+      justFinishedSpeaking = false;
+      mouthCooldown = false;
+    }, 20); // nur 20ms → fühlbar, aber unsichtbar
   };
 
-  // GANZ WICHTIG: Start TTS
+  // GANZ WICHTIG!
   speechSynthesis.speak(u);
-}
+}  // <== ENDE SPEAK – Klammern stimmen!
+
+
 /* -----------------------------
    RESIZE
 ----------------------------- */
