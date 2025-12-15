@@ -726,25 +726,25 @@ function speak(text, slow = false) {
 
     visemeTimer = setInterval(() => {
 
-      // 🔹 dezente Stärke (weniger präsent)
-      const target = 0.40 + Math.random() * 0.20; // 0.40–0.60
+      // 🔹 etwas offener als zuvor, aber noch dezent
+      const target = 0.48 + Math.random() * 0.18; // 0.48–0.66
 
-      // 🔹 sanfte Überblendung (kein Sprung)
+      // 🔹 sanfte Überblendung
       const idx = visemeIndex[cycle[c]];
       const current = visemeMesh.morphTargetInfluences[idx] || 0;
-      const smooth = current + (target - current) * 0.35;
+      const smooth = current + (target - current) * 0.30;
 
       setViseme(cycle[c], smooth);
 
       // 🔹 nicht jedes Mal wechseln
-      if (Math.random() < 0.30) {
+      if (Math.random() < 0.28) {
         c = (c + 1) % cycle.length;
       }
 
     }, stepMs);
   }
 
-  function stopVisemes(close = true, pause = 200) {
+  function stopVisemes(close = true, pause = 180) {
     running = false;
 
     if (visemeTimer) {
@@ -754,12 +754,13 @@ function speak(text, slow = false) {
 
     if (!visemeMesh || !visemeMesh.morphTargetInfluences) return;
 
-    // 🔒 Alle Viseme sofort beruhigen (verhindert Nachklappern)
+    // 🔒 alle aktiven Viseme sofort beenden
     visemeMesh.morphTargetInfluences.fill(0);
 
     if (close) {
-      // einmaliger, sanfter Mundschluss
-      setViseme("M", 0.6);
+      // 🔹 sehr sanfter Mundschluss (kein Klappern)
+      setViseme("M", 0.45);
+
       setTimeout(() => {
         visemeMesh.morphTargetInfluences.fill(0);
       }, pause);
@@ -791,13 +792,13 @@ function speak(text, slow = false) {
 
     // weiche Pause
     if (",;:".includes(ch)) {
-      stopVisemes(true, 160);
-      setTimeout(startVisemes, 160);
+      stopVisemes(true, 150);
+      setTimeout(startVisemes, 150);
     }
 
     // harte Pause / Satzende
     if (".!?".includes(ch)) {
-      stopVisemes(true, 240);
+      stopVisemes(true, 220);
     }
   };
 
@@ -805,7 +806,7 @@ function speak(text, slow = false) {
      ENDE DES SPRECHENS
   ----------------------------- */
   u.onend = () => {
-    stopVisemes(true, 220);
+    stopVisemes(true, 200);
 
     talking = false;
     justFinishedSpeaking = true;
@@ -814,7 +815,7 @@ function speak(text, slow = false) {
     setTimeout(() => {
       justFinishedSpeaking = false;
       mouthCooldown = false;
-    }, 120);
+    }, 140);
   };
 
   speechSynthesis.speak(u);
