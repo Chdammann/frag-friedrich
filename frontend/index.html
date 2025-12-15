@@ -696,7 +696,7 @@ function lerp(a, b, t) {
 }
 
 /* -----------------------------
-   SPEAK – FINAL NATURAL PAUSE (VISEME)
+   SPEAK – ABSOLUT FINAL (NO NACHKLAPPER)
 ----------------------------- */
 function speak(text, slow = false) {
 
@@ -711,34 +711,32 @@ function speak(text, slow = false) {
   const cycle = ["A", "E", "O", "U"];
   let targetIdx = 0;
 
-  // ⚖️ leicht direkter als zuvor
   const stepMs = slow ? 145 : 115;
   const lerpFactor = 0.42;
 
-  // Grundhaltung: Mund eher geschlossen
+  // Ruhestellung: leicht geschlossen
   const baseClose = 0.04;
 
-  function softenAll(factor = 0.85) {
-    if (!visemeMesh || !visemeMesh.morphTargetInfluences) return;
-    const inf = visemeMesh.morphTargetInfluences;
-    for (let i = 0; i < inf.length; i++) {
-      inf[i] *= factor;
-      if (inf[i] < baseClose) inf[i] = baseClose;
-    }
-  }
+  function hardStopToRest() {
+    active = false;
 
-  function resetToClosed() {
+    if (timer) {
+      clearInterval(timer);
+      timer = null;
+    }
+
     if (!visemeMesh || !visemeMesh.morphTargetInfluences) return;
-    const inf = visemeMesh.morphTargetInfluences;
-    inf.fill(0);
-    inf[visemeIndex.M] = baseClose; // ruhige, leicht geschlossene Pose
+
+    // ❗ KEINE Animation – sofortiger Zustand
+    visemeMesh.morphTargetInfluences.fill(0);
+    visemeMesh.morphTargetInfluences[visemeIndex.M] = baseClose;
   }
 
   function chooseNextViseme() {
     const r = Math.random();
     if (r < 0.42) return "A";
     if (r < 0.68) return "U";
-    if (r < 0.84) return "E"; // ≈ I
+    if (r < 0.84) return "E";
     return "O";
   }
 
@@ -755,7 +753,7 @@ function speak(text, slow = false) {
         targetIdx = visemeIndex[chooseNextViseme()];
       }
 
-      let target = 0.50 + Math.random() * 0.20; // minimal offener
+      let target = 0.50 + Math.random() * 0.20;
 
       // O & E dämpfen
       if (Object.keys(visemeIndex).find(k => visemeIndex[k] === targetIdx) === "O") {
@@ -774,31 +772,6 @@ function speak(text, slow = false) {
     }, stepMs);
   }
 
-  function pauseVisemes(duration = 120) {
-    active = false;
-
-    if (timer) {
-      clearInterval(timer);
-      timer = null;
-    }
-
-    // schnelleres Auslaufen, kein Schnapper
-    softenAll(0.78);
-
-    setTimeout(() => {
-      if (!active) startVisemes();
-    }, duration);
-  }
-
-  function stopAll() {
-    active = false;
-    if (timer) {
-      clearInterval(timer);
-      timer = null;
-    }
-    resetToClosed();
-  }
-
   /* -----------------------------
      START
   ----------------------------- */
@@ -807,31 +780,33 @@ function speak(text, slow = false) {
     mouthCooldown = false;
     justFinishedSpeaking = false;
 
-    resetToClosed();
+    hardStopToRest();
     startVisemes();
   };
 
   /* -----------------------------
-     SATZZEICHEN → WEICHE, KURZE PAUSE
+     SATZZEICHEN → KURZE PAUSE
+     (aber KEIN Reset)
   ----------------------------- */
   u.onboundary = e => {
     if (!active || !e || typeof e.charIndex !== "number") return;
     const ch = text[e.charIndex];
 
     if (",;:".includes(ch)) {
-      pauseVisemes(100);
+      active = false;
+      setTimeout(() => startVisemes(), 90);
     }
 
     if (".!?".includes(ch)) {
-      pauseVisemes(170);
+      active = false;
     }
   };
 
   /* -----------------------------
-     ENDE – RUHIG GESCHLOSSEN
+     ENDE – SOFORTIGE RUHESTELLUNG
   ----------------------------- */
   u.onend = () => {
-    stopAll();
+    hardStopToRest();   // ← HIER ist der entscheidende Fix
 
     talking = false;
     justFinishedSpeaking = true;
@@ -840,7 +815,7 @@ function speak(text, slow = false) {
     setTimeout(() => {
       justFinishedSpeaking = false;
       mouthCooldown = false;
-    }, 140);
+    }, 120);
   };
 
   speechSynthesis.speak(u);
