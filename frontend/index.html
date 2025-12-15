@@ -711,12 +711,13 @@ function speak(text, slow = false) {
   let visemeTimer = null;
   let running = false;
 
-  // Ruhige, würdige Viseme-Basis
+  // Würdige, aber lebendige Viseme-Basis
   const cycle = ["A", "E", "O", "U"];
   let c = Math.floor(Math.random() * cycle.length);
+  let holdCount = 0;
 
-  // etwas langsamer für Ruhe
-  const stepMs = slow ? 260 : 210;
+  // Rhythmus leicht beschleunigt für mehr Leben
+  const stepMs = slow ? 240 : 195;
 
   function startVisemes() {
     if (running) return;
@@ -726,25 +727,28 @@ function speak(text, slow = false) {
 
     visemeTimer = setInterval(() => {
 
-      // 🔹 etwas offener als zuvor, aber noch dezent
-      const target = 0.48 + Math.random() * 0.18; // 0.48–0.66
+      // 🔹 etwas größere Öffnung
+      const target = 0.52 + Math.random() * 0.22; // 0.52–0.74
 
-      // 🔹 sanfte Überblendung
+      // 🔹 weiche Überblendung
       const idx = visemeIndex[cycle[c]];
       const current = visemeMesh.morphTargetInfluences[idx] || 0;
-      const smooth = current + (target - current) * 0.30;
+      const smooth = current + (target - current) * 0.33;
 
       setViseme(cycle[c], smooth);
 
-      // 🔹 nicht jedes Mal wechseln
-      if (Math.random() < 0.28) {
+      holdCount++;
+
+      // 🔹 Visemwechsel erzwingen, falls es „klebt“
+      if (holdCount >= 3 || Math.random() < 0.42) {
         c = (c + 1) % cycle.length;
+        holdCount = 0;
       }
 
     }, stepMs);
   }
 
-  function stopVisemes(close = true, pause = 180) {
+  function stopVisemes(close = true, pause = 170) {
     running = false;
 
     if (visemeTimer) {
@@ -754,12 +758,12 @@ function speak(text, slow = false) {
 
     if (!visemeMesh || !visemeMesh.morphTargetInfluences) return;
 
-    // 🔒 alle aktiven Viseme sofort beenden
+    // 🔒 alle aktiven Viseme sofort beruhigen
     visemeMesh.morphTargetInfluences.fill(0);
 
     if (close) {
-      // 🔹 sehr sanfter Mundschluss (kein Klappern)
-      setViseme("M", 0.45);
+      // 🔹 sehr kurzer, sehr weicher Mundschluss
+      setViseme("M", 0.38);
 
       setTimeout(() => {
         visemeMesh.morphTargetInfluences.fill(0);
@@ -792,13 +796,13 @@ function speak(text, slow = false) {
 
     // weiche Pause
     if (",;:".includes(ch)) {
-      stopVisemes(true, 150);
-      setTimeout(startVisemes, 150);
+      stopVisemes(true, 140);
+      setTimeout(startVisemes, 140);
     }
 
     // harte Pause / Satzende
     if (".!?".includes(ch)) {
-      stopVisemes(true, 220);
+      stopVisemes(true, 210);
     }
   };
 
@@ -806,7 +810,7 @@ function speak(text, slow = false) {
      ENDE DES SPRECHENS
   ----------------------------- */
   u.onend = () => {
-    stopVisemes(true, 200);
+    stopVisemes(true, 190);
 
     talking = false;
     justFinishedSpeaking = true;
@@ -815,11 +819,12 @@ function speak(text, slow = false) {
     setTimeout(() => {
       justFinishedSpeaking = false;
       mouthCooldown = false;
-    }, 140);
+    }, 160);
   };
 
   speechSynthesis.speak(u);
 }
+
 
 /* -----------------------------
    RESIZE
