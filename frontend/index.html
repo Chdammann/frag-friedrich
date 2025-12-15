@@ -696,7 +696,7 @@ function lerp(a, b, t) {
 }
 
 /* -----------------------------
-   SPEAK – STABIL (VISEME-BASIERT, TDZ-SICHER)
+   SPEAK – STABIL (VISEME-BASIERT, FINAL)
 ----------------------------- */
 function speak(text, slow = false) {
 
@@ -716,9 +716,10 @@ function speak(text, slow = false) {
   const stepMs = slow ? 220 : 180;
 
   function startVisemes() {
-    if (!visemeReady || running) return;
-    running = true;
+    if (running) return;
+    if (!visemeMesh || !visemeMesh.morphTargetInfluences) return;
 
+    running = true;
     visemeTimer = setInterval(() => {
       setViseme(cycle[c], 0.9);
       c = (c + 1) % cycle.length;
@@ -727,30 +728,39 @@ function speak(text, slow = false) {
 
   function stopVisemes(close = true) {
     running = false;
+
     if (visemeTimer) {
       clearInterval(visemeTimer);
       visemeTimer = null;
     }
 
-    if (visemeReady && close) {
+    if (close && visemeMesh && visemeMesh.morphTargetInfluences) {
       setViseme("M", 1);
       setTimeout(() => setViseme("M", 0), 180);
     }
   }
 
+  /* -----------------------------
+     START DES SPRECHENS
+  ----------------------------- */
   u.onstart = () => {
     talking = true;
     mouthCooldown = false;
     justFinishedSpeaking = false;
 
-    if (visemeReady) {
+    if (visemeMesh && visemeMesh.morphTargetInfluences) {
       setViseme("M", 0);
       startVisemes();
     }
   };
 
+  /* -----------------------------
+     SATZZEICHEN → MUND ZU
+  ----------------------------- */
   u.onboundary = e => {
-    if (!visemeReady || !e || typeof e.charIndex !== "number") return;
+    if (!e || typeof e.charIndex !== "number") return;
+    if (!visemeMesh || !visemeMesh.morphTargetInfluences) return;
+
     const ch = text[e.charIndex];
 
     if (",;:".includes(ch)) {
@@ -763,10 +773,13 @@ function speak(text, slow = false) {
     }
   };
 
+  /* -----------------------------
+     ENDE DES SPRECHENS
+  ----------------------------- */
   u.onend = () => {
     stopVisemes(true);
-    talking = false;
 
+    talking = false;
     justFinishedSpeaking = true;
     mouthCooldown = true;
 
