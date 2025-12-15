@@ -696,7 +696,7 @@ function lerp(a, b, t) {
 }
 
 /* -----------------------------
-   SPEAK – FINAL BALANCED (VISEME)
+   SPEAK – FINAL TUNED (VISEME)
 ----------------------------- */
 function speak(text, slow = false) {
 
@@ -708,37 +708,52 @@ function speak(text, slow = false) {
   let timer = null;
   let active = false;
 
+  // Viseme-Zyklus (E ≈ I)
   const cycle = ["A", "E", "O", "U"];
   let targetIdx = 0;
 
-  // ⚖️ ausgewogene Parameter
-  const stepMs = slow ? 160 : 130;   // ⬅️ deutlich schneller
-  const lerpFactor = 0.32;           // ⬅️ direkter, aber noch weich
-  const phaseStep = 0.9;             // ⬅️ kein Zeitlupen-Gefühl
+  // ⚖️ Tempo & Rundung (minimal schneller)
+  const stepMs = slow ? 150 : 120;   // ⬅️ leicht schneller
+  const lerpFactor = 0.36;           // ⬅️ etwas direkter, aber rund
 
   function resetAll() {
     if (!visemeMesh || !visemeMesh.morphTargetInfluences) return;
     visemeMesh.morphTargetInfluences.fill(0);
   }
 
+  function chooseNextViseme() {
+    // A und U bevorzugen, O/E seltener
+    const r = Math.random();
+    if (r < 0.40) return "A";
+    if (r < 0.65) return "U";
+    if (r < 0.82) return "E"; // „I“-ähnlich → seltener
+    return "O";               // stark → am seltensten
+  }
+
   function startVisemes() {
     if (active || !visemeMesh || !visemeMesh.morphTargetInfluences) return;
 
     active = true;
-    targetIdx = visemeIndex[cycle[Math.floor(Math.random() * cycle.length)]];
+    targetIdx = visemeIndex[chooseNextViseme()];
 
     timer = setInterval(() => {
       if (!active) return;
 
-      // Ziel wechseln
-      if (Math.random() < 0.45) {
-        const next = cycle[Math.floor(Math.random() * cycle.length)];
-        targetIdx = visemeIndex[next];
+      // häufiger Wechsel für mehr Leben
+      if (Math.random() < 0.50) {
+        targetIdx = visemeIndex[chooseNextViseme()];
       }
 
-      // Zielstärke
-      let target = 0.55 + Math.random() * 0.20; // 0.55–0.75
-      if (Object.keys(visemeIndex)[targetIdx] === "O") {
+      // Grundöffnung
+      let target = 0.56 + Math.random() * 0.18; // 0.56–0.74
+
+      // 🔹 O stark dämpfen
+      if (Object.keys(visemeIndex).find(k => visemeIndex[k] === targetIdx) === "O") {
+        target *= 0.65;
+      }
+
+      // 🔹 E (≈ I) moderat dämpfen
+      if (Object.keys(visemeIndex).find(k => visemeIndex[k] === targetIdx) === "E") {
         target *= 0.75;
       }
 
@@ -759,11 +774,16 @@ function speak(text, slow = false) {
       timer = null;
     }
 
+    if (!visemeMesh || !visemeMesh.morphTargetInfluences) return;
+
+    // 🔒 HARTE RUHE – verhindert letzten Nachklapper
     resetAll();
 
     if (finalClose) {
-      setViseme("M", 0.3);
-      setTimeout(resetAll, 120);
+      setViseme("M", 0.28);          // sehr sanfter Schluss
+      setTimeout(() => {
+        resetAll();                  // endgültiger Lock
+      }, 110);
     }
   }
 
@@ -780,7 +800,7 @@ function speak(text, slow = false) {
   };
 
   /* -----------------------------
-     SATZZEICHEN
+     SATZZEICHEN (Fallback)
   ----------------------------- */
   u.onboundary = e => {
     if (!active || !e || typeof e.charIndex !== "number") return;
@@ -788,7 +808,7 @@ function speak(text, slow = false) {
 
     if (",;:".includes(ch)) {
       stopVisemes(true);
-      setTimeout(startVisemes, 120);
+      setTimeout(startVisemes, 110);
     }
     if (".!?".includes(ch)) {
       stopVisemes(true);
