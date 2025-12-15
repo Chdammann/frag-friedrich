@@ -715,7 +715,8 @@ function speak(text, slow = false) {
   const cycle = ["A", "E", "O", "U"];
   let c = Math.floor(Math.random() * cycle.length);
 
-  const stepMs = slow ? 220 : 180;
+  // etwas langsamer für Ruhe
+  const stepMs = slow ? 260 : 210;
 
   function startVisemes() {
     if (running) return;
@@ -725,19 +726,25 @@ function speak(text, slow = false) {
 
     visemeTimer = setInterval(() => {
 
-      // 🔹 Stärke leicht variieren (vermeidet Robotik)
-      const strength = 0.40 + Math.random() * 0.20; // 0.65–0.90
-      setViseme(cycle[c], strength);
+      // 🔹 dezente Stärke (weniger präsent)
+      const target = 0.40 + Math.random() * 0.20; // 0.40–0.60
 
-      // 🔹 Nicht jedes Mal wechseln → natürlicher
-      if (Math.random() < 0.35) {
+      // 🔹 sanfte Überblendung (kein Sprung)
+      const idx = visemeIndex[cycle[c]];
+      const current = visemeMesh.morphTargetInfluences[idx] || 0;
+      const smooth = current + (target - current) * 0.35;
+
+      setViseme(cycle[c], smooth);
+
+      // 🔹 nicht jedes Mal wechseln
+      if (Math.random() < 0.30) {
         c = (c + 1) % cycle.length;
       }
 
     }, stepMs);
   }
 
-  function stopVisemes(close = true, pause = 180) {
+  function stopVisemes(close = true, pause = 200) {
     running = false;
 
     if (visemeTimer) {
@@ -745,9 +752,17 @@ function speak(text, slow = false) {
       visemeTimer = null;
     }
 
-    if (close && visemeMesh && visemeMesh.morphTargetInfluences) {
-      setViseme("M", 1);
-      setTimeout(() => setViseme("M", 0), pause);
+    if (!visemeMesh || !visemeMesh.morphTargetInfluences) return;
+
+    // 🔒 Alle Viseme sofort beruhigen (verhindert Nachklappern)
+    visemeMesh.morphTargetInfluences.fill(0);
+
+    if (close) {
+      // einmaliger, sanfter Mundschluss
+      setViseme("M", 0.6);
+      setTimeout(() => {
+        visemeMesh.morphTargetInfluences.fill(0);
+      }, pause);
     }
   }
 
