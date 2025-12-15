@@ -696,7 +696,7 @@ function lerp(a, b, t) {
 }
 
 /* -----------------------------
-   SPEAK – ABSOLUT FINAL (NO NACHKLAPPER)
+   SPEAK – FINAL (VISEME, GREET-FIX)
 ----------------------------- */
 function speak(text, slow = false) {
 
@@ -705,11 +705,11 @@ function speak(text, slow = false) {
   u.rate = slow ? 0.85 : 1.0;
   if (maleVoice) u.voice = maleVoice;
 
+  // 👑 Begrüßung gesondert behandeln
+  const isGreeting = (STATE === "greet");
+
   let timer = null;
   let active = false;
-
-  const cycle = ["A", "E", "O", "U"];
-  let targetIdx = 0;
 
   const stepMs = slow ? 145 : 115;
   const lerpFactor = 0.42;
@@ -727,7 +727,7 @@ function speak(text, slow = false) {
 
     if (!visemeMesh || !visemeMesh.morphTargetInfluences) return;
 
-    // ❗ KEINE Animation – sofortiger Zustand
+    // ❗ sofortiger Endzustand – keine Animation
     visemeMesh.morphTargetInfluences.fill(0);
     visemeMesh.morphTargetInfluences[visemeIndex.M] = baseClose;
   }
@@ -736,7 +736,7 @@ function speak(text, slow = false) {
     const r = Math.random();
     if (r < 0.42) return "A";
     if (r < 0.68) return "U";
-    if (r < 0.84) return "E";
+    if (r < 0.84) return "E"; // ≈ I
     return "O";
   }
 
@@ -744,7 +744,7 @@ function speak(text, slow = false) {
     if (active || !visemeMesh || !visemeMesh.morphTargetInfluences) return;
 
     active = true;
-    targetIdx = visemeIndex[chooseNextViseme()];
+    let targetIdx = visemeIndex[chooseNextViseme()];
 
     timer = setInterval(() => {
       if (!active) return;
@@ -756,12 +756,9 @@ function speak(text, slow = false) {
       let target = 0.50 + Math.random() * 0.20;
 
       // O & E dämpfen
-      if (Object.keys(visemeIndex).find(k => visemeIndex[k] === targetIdx) === "O") {
-        target *= 0.65;
-      }
-      if (Object.keys(visemeIndex).find(k => visemeIndex[k] === targetIdx) === "E") {
-        target *= 0.75;
-      }
+      const key = Object.keys(visemeIndex).find(k => visemeIndex[k] === targetIdx);
+      if (key === "O") target *= 0.65;
+      if (key === "E") target *= 0.75;
 
       const inf = visemeMesh.morphTargetInfluences;
       for (let i = 0; i < inf.length; i++) {
@@ -785,11 +782,14 @@ function speak(text, slow = false) {
   };
 
   /* -----------------------------
-     SATZZEICHEN → KURZE PAUSE
-     (aber KEIN Reset)
+     SATZZEICHEN
+     – Begrüßung: IGNORIEREN
+     – Antworten: sanfte Pausen
   ----------------------------- */
   u.onboundary = e => {
+    if (isGreeting) return;
     if (!active || !e || typeof e.charIndex !== "number") return;
+
     const ch = text[e.charIndex];
 
     if (",;:".includes(ch)) {
@@ -803,10 +803,10 @@ function speak(text, slow = false) {
   };
 
   /* -----------------------------
-     ENDE – SOFORTIGE RUHESTELLUNG
+     ENDE – SOFORT RUHE
   ----------------------------- */
   u.onend = () => {
-    hardStopToRest();   // ← HIER ist der entscheidende Fix
+    hardStopToRest();
 
     talking = false;
     justFinishedSpeaking = true;
