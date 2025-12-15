@@ -711,9 +711,9 @@ function speak(text, slow = false) {
   const cycle = ["A", "E", "O", "U"];
   let targetIdx = 0;
 
-  // Grundtempo & Rundung
-  const stepMs = slow ? 150 : 120;
-  const lerpFactor = 0.34;
+  // ⚖️ leicht direkter als zuvor
+  const stepMs = slow ? 145 : 115;
+  const lerpFactor = 0.42;
 
   // Grundhaltung: Mund eher geschlossen
   const baseClose = 0.04;
@@ -751,13 +751,11 @@ function speak(text, slow = false) {
     timer = setInterval(() => {
       if (!active) return;
 
-      // Visem gelegentlich wechseln
-      if (Math.random() < 0.45) {
+      if (Math.random() < 0.50) {
         targetIdx = visemeIndex[chooseNextViseme()];
       }
 
-      // Zielöffnung (moderat)
-      let target = 0.50 + Math.random() * 0.18; // 0.50–0.68
+      let target = 0.50 + Math.random() * 0.20; // minimal offener
 
       // O & E dämpfen
       if (Object.keys(visemeIndex).find(k => visemeIndex[k] === targetIdx) === "O") {
@@ -776,7 +774,7 @@ function speak(text, slow = false) {
     }, stepMs);
   }
 
-  function pauseVisemes(duration = 140) {
+  function pauseVisemes(duration = 120) {
     active = false;
 
     if (timer) {
@@ -784,8 +782,8 @@ function speak(text, slow = false) {
       timer = null;
     }
 
-    // sanft auslaufen lassen, KEIN Schnappen
-    softenAll(0.82);
+    // schnelleres Auslaufen, kein Schnapper
+    softenAll(0.78);
 
     setTimeout(() => {
       if (!active) startVisemes();
@@ -814,18 +812,18 @@ function speak(text, slow = false) {
   };
 
   /* -----------------------------
-     SATZZEICHEN → WEICHE PAUSE
+     SATZZEICHEN → WEICHE, KURZE PAUSE
   ----------------------------- */
   u.onboundary = e => {
     if (!active || !e || typeof e.charIndex !== "number") return;
     const ch = text[e.charIndex];
 
     if (",;:".includes(ch)) {
-      pauseVisemes(120);   // kleine Denkpause
+      pauseVisemes(100);
     }
 
     if (".!?".includes(ch)) {
-      pauseVisemes(200);   // längere Pause, aber kein Zuklappen
+      pauseVisemes(170);
     }
   };
 
@@ -842,7 +840,7 @@ function speak(text, slow = false) {
     setTimeout(() => {
       justFinishedSpeaking = false;
       mouthCooldown = false;
-    }, 160);
+    }, 140);
   };
 
   speechSynthesis.speak(u);
