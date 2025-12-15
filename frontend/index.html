@@ -646,16 +646,9 @@ function lerp(a, b, t) {
 }
 
 /* -----------------------------
-   SPEAK – STABIL (VISEME-BASIERT, GUARD)
+   SPEAK – STABIL (VISEME-BASIERT, TDZ-SICHER)
 ----------------------------- */
 function speak(text, slow = false) {
-
-  // 🛡️ HARTE ABSICHERUNG GEGEN FRÜHAUFRUFE
-  // speak() darf existieren, auch wenn das Modell noch nicht da ist
-  const visemeReady =
-    typeof setViseme === "function" &&
-    typeof visemeMesh !== "undefined" &&
-    visemeMesh !== null;
 
   const u = new SpeechSynthesisUtterance(text);
   u.lang = "de-DE";
@@ -695,9 +688,6 @@ function speak(text, slow = false) {
     }
   }
 
-  /* -----------------------------
-     START DES SPRECHENS
-  ----------------------------- */
   u.onstart = () => {
     talking = true;
     mouthCooldown = false;
@@ -709,9 +699,6 @@ function speak(text, slow = false) {
     }
   };
 
-  /* -----------------------------
-     SATZZEICHEN → MUND ZU
-  ----------------------------- */
   u.onboundary = e => {
     if (!visemeReady || !e || typeof e.charIndex !== "number") return;
     const ch = text[e.charIndex];
@@ -726,12 +713,8 @@ function speak(text, slow = false) {
     }
   };
 
-  /* -----------------------------
-     ENDE DES SPRECHENS
-  ----------------------------- */
   u.onend = () => {
     stopVisemes(true);
-
     talking = false;
 
     justFinishedSpeaking = true;
