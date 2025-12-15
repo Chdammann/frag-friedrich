@@ -696,7 +696,7 @@ function lerp(a, b, t) {
 }
 
 /* -----------------------------
-   SPEAK – STABIL (VISEME-BASIERT, FINAL)
+   SPEAK – FEINTUNING (VISEME)
 ----------------------------- */
 function speak(text, slow = false) {
 
@@ -711,8 +711,10 @@ function speak(text, slow = false) {
   let visemeTimer = null;
   let running = false;
 
+  // Ruhige, würdige Viseme-Basis
   const cycle = ["A", "E", "O", "U"];
-  let c = 0;
+  let c = Math.floor(Math.random() * cycle.length);
+
   const stepMs = slow ? 220 : 180;
 
   function startVisemes() {
@@ -720,13 +722,22 @@ function speak(text, slow = false) {
     if (!visemeMesh || !visemeMesh.morphTargetInfluences) return;
 
     running = true;
+
     visemeTimer = setInterval(() => {
-      setViseme(cycle[c], 0.9);
-      c = (c + 1) % cycle.length;
+
+      // 🔹 Stärke leicht variieren (vermeidet Robotik)
+      const strength = 0.65 + Math.random() * 0.25; // 0.65–0.90
+      setViseme(cycle[c], strength);
+
+      // 🔹 Nicht jedes Mal wechseln → natürlicher
+      if (Math.random() < 0.35) {
+        c = (c + 1) % cycle.length;
+      }
+
     }, stepMs);
   }
 
-  function stopVisemes(close = true) {
+  function stopVisemes(close = true, pause = 180) {
     running = false;
 
     if (visemeTimer) {
@@ -736,7 +747,7 @@ function speak(text, slow = false) {
 
     if (close && visemeMesh && visemeMesh.morphTargetInfluences) {
       setViseme("M", 1);
-      setTimeout(() => setViseme("M", 0), 180);
+      setTimeout(() => setViseme("M", 0), pause);
     }
   }
 
@@ -763,13 +774,15 @@ function speak(text, slow = false) {
 
     const ch = text[e.charIndex];
 
+    // weiche Pause
     if (",;:".includes(ch)) {
-      stopVisemes(true);
-      setTimeout(startVisemes, 180);
+      stopVisemes(true, 160);
+      setTimeout(startVisemes, 160);
     }
 
+    // harte Pause / Satzende
     if (".!?".includes(ch)) {
-      stopVisemes(true);
+      stopVisemes(true, 240);
     }
   };
 
@@ -777,7 +790,7 @@ function speak(text, slow = false) {
      ENDE DES SPRECHENS
   ----------------------------- */
   u.onend = () => {
-    stopVisemes(true);
+    stopVisemes(true, 220);
 
     talking = false;
     justFinishedSpeaking = true;
