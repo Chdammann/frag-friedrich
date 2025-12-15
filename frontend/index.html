@@ -623,6 +623,43 @@ function startRecognition() {
   }
 }
 
+/* -----------------------------
+   BUTTON – GREET & LISTEN
+----------------------------- */
+document.getElementById("micBtn").onclick = () => {
+
+  // 🛡️ Wake-Guard: erster Klick nach Ruhemodus tut nichts
+  if (wakeGuard) {
+    console.log("⏳ Klick ignoriert (Wake-Guard)");
+    return;
+  }
+
+  // 1️⃣ ERSTER KLICK → BEGRÜSSUNG
+  if (!greeted) {
+    resetMovements();
+    greeted = true;
+    STATE = "greet";
+
+    frontalFix = false;
+    rising = true;
+    riseStartTime = performance.now();
+
+    speak(
+      "Seid gegrüßt, mein Freund. Ich bin Friedrich Barbarossa, nach fast neunhundert Jahren im Kaiserberg zu Lautern erwacht. Was ist Euer Begehr.",
+      false
+    );
+    return;
+  }
+
+  // 2️⃣ SPRACHERKENNUNG VERFÜGBAR?
+  if (!recognition) {
+    alert("Spracherkennung wird von diesem Browser nicht unterstützt.");
+    return;
+  }
+
+  // 3️⃣ ERKENNUNG STARTEN (SAUBER GEKAPSELT)
+  startRecognition();
+};
 
 /* -----------------------------
    1) MÄNNLICHE STIMME FEST SETZEN  (GLOBAL!)
