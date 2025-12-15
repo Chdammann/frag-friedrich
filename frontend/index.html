@@ -219,13 +219,14 @@ function setViseme(key, value) {
   visemeMesh.morphTargetInfluences[idx] = value;
 }
 /* --------------------------------------------------
-   VISEME-LIPSYNC AUS TEXT + TTS (STABIL)
+   VISEME-LIPSYNC AUS TEXT + TTS
+   (SATZZEICHEN-GESTEUERT, OHNE NACHKLAPPERN)
 -------------------------------------------------- */
 
 function applyVisemeFromChar(ch) {
   ch = ch.toLowerCase();
 
-  // harte Schließer
+  // harte Schließer (Konsonanten)
   if ("mpb".includes(ch)) return "M";
 
   // Vokale
@@ -237,10 +238,18 @@ function applyVisemeFromChar(ch) {
   return null;
 }
 
-function speakWithVisemes(text, slow = false) {
+function isSoftPause(ch) {
+  return ",;:".includes(ch);
+}
+
+function isHardPause(ch) {
+  return ".!?".includes(ch);
+}
+
+function speakWithVisemes(text, slow = true) {
   if (!visemeMesh) return;
 
-  // --- TTS ---
+  /* --- TTS --- */
   const u = new SpeechSynthesisUtterance(text);
   u.lang = "de-DE";
   u.rate = slow ? 0.85 : 1.0;
@@ -248,20 +257,37 @@ function speakWithVisemes(text, slow = false) {
 
   let i = 0;
   let lastKey = null;
-  const stepMs = slow ? 150 : 120;
+  const stepMs = slow ? 180 : 150;
 
-  // Start: Mund neutral
+  // Start neutral
   setViseme("M", 0);
 
   const step = () => {
-    if (i >= text.length) {
-      // Satzende: sauber schließen
+    if (i >= text.length) return;
+
+    const ch = text[i];
+
+    /* --- SATZZEICHEN --- */
+    if (isSoftPause(ch)) {
       setViseme("M", 1);
-      setTimeout(() => setViseme("M", 0), 160);
+      setTimeout(() => setViseme("M", 0), 140);
+      i++;
+      setTimeout(step, stepMs + 120);
       return;
     }
 
-    const key = applyVisemeFromChar(text[i]);
+    if (isHardPause(ch)) {
+      setViseme("M", 1);
+      i++;
+      setTimeout(() => {
+        setViseme("M", 0);
+        step();
+      }, stepMs + 220);
+      return;
+    }
+
+    /* --- NORMALE ZEICHEN --- */
+    const key = applyVisemeFromChar(ch);
 
     if (key && key !== lastKey) {
       setViseme(key, 1);
@@ -275,11 +301,10 @@ function speakWithVisemes(text, slow = false) {
     }, stepMs);
   };
 
-  // Starten
+  // Start synchron
   u.onstart = () => step();
   speechSynthesis.speak(u);
 }
-
 // ====================================
 // ANIMATE – FINAL & STABIL
 // ====================================
