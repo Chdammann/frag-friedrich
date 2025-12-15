@@ -78,14 +78,10 @@ console.log("SCRIPT START");
    STATE-VARIABLEN + SICHERHEIT
 ================================ */
 
-// === Blendshape-Indices (Default bis Modell geladen) ===
-let jawOpenIndex = null;
-let mouthWideIndex = null;
-let mouthPuckerIndex = null;
-let mouthSmileIndex = null;
-let mouthFrownIndex = null;
+// === VISEME-STATE (zentral, exklusiv) ===
+let visemeMesh = null;               // wird im GLTF-Loader gesetzt
 
-// Audio / Analyse
+// Audio / Analyse (Reserve / optional)
 let audioCtx, analyser, src;
 
 // === Hauptzustände ===
@@ -126,9 +122,11 @@ function resetMovements() {
   rising = false;
   talking = false;
 }
-  /* -----------------------------
+
+/* -----------------------------
    THREE.js SETUP
 ----------------------------- */
+
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(
   30,
