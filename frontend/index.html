@@ -125,54 +125,7 @@ function resetMovements() {
   rising = false;
   talking = false;
 }
-/* --------------------------------------------------
-   MODEL – VISEME-MESH FINDEN & INITIALISIEREN
-   (KLON – VISeme-Version)
--------------------------------------------------- */
-
-let visemeMesh = null;
-
-// Viseme-Indizes (fix aus Blender / GLB)
-const visemeIndex = {
-  A: 0,
-  E: 1,
-  O: 2,
-  U: 3,
-  M: 4
-};
-
-model.traverse(obj => {
-  if (obj.isSkinnedMesh && obj.morphTargetDictionary) {
-    console.log("✔ Viseme-SkinnedMesh gefunden:", obj.name);
-    console.log("Viseme-Dictionary:", obj.morphTargetDictionary);
-    visemeMesh = obj;
-  }
-});
-
-if (!visemeMesh) {
-  console.error("❌ KEIN SkinnedMesh mit Visemen gefunden!");
-} else {
-  console.log("✔ Viseme-Mesh aktiv");
-}
-
-// === MODEL STARTEN ===
-document.getElementById("loading").style.display = "none";
-animate();
-/* --------------------------------------------------
-   VISEME SETZEN – EXKLUSIV
--------------------------------------------------- */
-function setViseme(key, value) {
-  if (!visemeMesh) return;
-
-  const idx = visemeIndex[key];
-  if (idx === undefined) return;
-
-  // Alle Viseme zurücksetzen
-  visemeMesh.morphTargetInfluences.fill(0);
-
-  // Zielvisem setzen
-  visemeMesh.morphTargetInfluences[idx] = value;
-}
+setViseme("A", 1);
 
 // ====================================
 // ANIMATE – FINAL & STABIL
