@@ -218,7 +218,60 @@ function setViseme(key, value) {
   // Ziel-Visem setzen
   visemeMesh.morphTargetInfluences[idx] = value;
 }
+/* --------------------------------------------------
+   VISEME-LIPSYNC AUS TEXT (STABIL)
+-------------------------------------------------- */
 
+function applyVisemeFromChar(ch) {
+  ch = ch.toLowerCase();
+
+  // harte Schließer
+  if ("mpb".includes(ch)) return "M";
+
+  // Vokale
+  if ("aä".includes(ch)) return "A";
+  if ("eéií".includes(ch)) return "E";
+  if ("oö".includes(ch)) return "O";
+  if ("uü".includes(ch)) return "U";
+
+  // alles andere: nichts ändern
+  return null;
+}
+
+function speakWithVisemes(text) {
+  if (!visemeMesh) return;
+
+  let i = 0;
+  let lastKey = null;
+
+  // Start: Mund neutral
+  setViseme("M", 0);
+
+  const step = () => {
+    if (i >= text.length) {
+      // Satzende: Mund zu
+      setViseme("M", 1);
+      setTimeout(() => setViseme("M", 0), 120);
+      return;
+    }
+
+    const key = applyVisemeFromChar(text[i]);
+
+    if (key && key !== lastKey) {
+      setViseme(key, 1);
+      lastKey = key;
+    }
+
+    // kurze Haltezeit pro Zeichen (stabil, ohne Zittern)
+    setTimeout(() => {
+      if (key) setViseme(key, 0);
+      i++;
+      step();
+    }, 70);
+  };
+
+  step();
+}
 
 // ====================================
 // ANIMATE – FINAL & STABIL
