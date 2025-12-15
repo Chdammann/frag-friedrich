@@ -306,7 +306,7 @@ function speakWithVisemes(text, slow = true) {
   speechSynthesis.speak(u);
 }
 // ====================================
-// ANIMATE – FINAL & STABIL
+// ANIMATE – FINAL & STABIL (VISEME-KLON)
 // ====================================
 function animate() {
   requestAnimationFrame(animate);
@@ -317,12 +317,12 @@ function animate() {
   const rightY   = baseRotY - Math.PI / 2;     // Startpose rechts
   const leftY    = frontalY + 0.25;            // Hmmm = leicht links
 
-  // 🧊 Idle-Mundhaltung nur, wenn NICHT gesprochen wird
-  //    und kein Cooldown / Nachzittern aktiv ist:
+  // 🧊 Idle-Mundhaltung (VISEME): nur wenn NICHT gesprochen wird
+  //    und kein Cooldown / Nachzittern aktiv ist.
+  //    Wichtig: NICHT während talking -> sonst überschreibt animate die Viseme-Steuerung.
   if (!talking && !justFinishedSpeaking && !mouthCooldown) {
-    setBlendshape(jawOpenIndex, 0.05);  // dezente Atmung
-    setBlendshape(mouthWideIndex, 0.0);
-    setBlendshape(mouthPuckerIndex, 0.0);
+    // neutral/geschlossen – kein "Atmen" über Viseme, um Flattern zu vermeiden
+    setViseme("M", 0);
   }
 
   // 0️⃣ START: Ausgangsposition (leicht rechts)
@@ -380,27 +380,28 @@ function animate() {
   }
 
   // ⭐ Sehr dezente, würdige Kopf-Driftbewegungen (Kaiser-Version 3.0)
-const driftX = Math.sin(now * 0.0004) * 0.015;   // langsames, kaum sichtbares Nicken
-const driftY = Math.sin(now * 0.0003) * 0.012;   // sehr sanfte Seitbewegung
+  const driftX = Math.sin(now * 0.0004) * 0.015;   // langsames, kaum sichtbares Nicken
+  const driftY = Math.sin(now * 0.0003) * 0.012;   // sehr sanfte Seitbewegung
 
-// X-Achse → sanft um baseRotX
-model.rotation.x = THREE.MathUtils.lerp(
-  model.rotation.x,
-  baseRotX + driftX,
-  0.02
-);
-
-// Y-Achse → um fixe Basis (keine Aufschaukelung)
-if (!hmNeigen && !rising) {
-  const baseYawForDrift = (STATE === "idle") ? rightY : frontalY;
-  const targetYaw = baseYawForDrift + driftY;
-
-  model.rotation.y = THREE.MathUtils.lerp(
-    model.rotation.y,
-    targetYaw,
+  // X-Achse → sanft um baseRotX
+  model.rotation.x = THREE.MathUtils.lerp(
+    model.rotation.x,
+    baseRotX + driftX,
     0.02
   );
-}
+
+  // Y-Achse → um fixe Basis (keine Aufschaukelung)
+  if (!hmNeigen && !rising) {
+    const baseYawForDrift = (STATE === "idle") ? rightY : frontalY;
+    const targetYaw = baseYawForDrift + driftY;
+
+    model.rotation.y = THREE.MathUtils.lerp(
+      model.rotation.y,
+      targetYaw,
+      0.02
+    );
+  }
+
   renderer.render(scene, camera);
 }
 
@@ -560,14 +561,13 @@ function museumReset(reason = "") {
   recognitionHandled = false;
   askInProgress = false;
 
-  // --- Mund neutralisieren ---
-  if (jawOpenIndex !== null) {
-    setBlendshape(jawOpenIndex, 0);
-    setBlendshape(mouthWideIndex, 0);
-    setBlendshape(mouthPuckerIndex, 0);
-    setBlendshape(mouthSmileIndex, 0);
-    setBlendshape(mouthFrownIndex, 0);
-  }
+  // --- Mund neutralisieren (VISEME) ---
+  // Keine alten Blendshapes mehr ansprechen: sie würden gegen Viseme-Steuerung arbeiten.
+  try {
+    if (typeof setViseme === "function") {
+      setViseme("M", 0);
+    }
+  } catch (e) {}
 
   // --- Kopf & Position neutral ---
   if (model) {
@@ -589,43 +589,6 @@ window.addEventListener("focus", () => {
     museumReset("focus");
   }
 });
-
-
-/* -----------------------------
-   BUTTON – GREET & LISTEN
------------------------------ */
-document.getElementById("micBtn").onclick = () => {
-
-  // 🛡️ Wake-Guard: erster Klick nach Ruhemodus tut nichts
-  if (wakeGuard) {
-    console.log("⏳ Klick ignoriert (Wake-Guard)");
-    return;
-  }
-
-  // Erste Betätigung → Begrüßung
-  if (!greeted) {
-    resetMovements();
-    greeted = true;
-    STATE = "greet";
-
-    frontalFix = false;
-    rising = true;
-    riseStartTime = performance.now();
-
-    speak(
-      "Seid gegrüßt, mein Freund. Ich bin Friedrich Barbarossa, nach fast neunhundert Jahren im Kaiserberg zu Lautern erwacht. Was ist Euer Begehr.",
-      false
-    );
-    return;
-  }
-
-  // Spracherkennung vorhanden?
-  if (!recognition) {
-    alert("Spracherkennung wird nicht unterstützt.");
-    return;
-  }
-
-  if (recRunning) {
     console.warn("❗RECOGNITION BLOCKED — already running");
     return;
   }
@@ -647,9 +610,11 @@ document.getElementById("micBtn").onclick = () => {
   }
 };
 
+
 /* -----------------------------
    1) MÄNNLICHE STIMME FEST SETZEN  (GLOBAL!)
 ----------------------------- */
+
 let maleVoice = null;
 
 function setMaleVoice() {
@@ -660,53 +625,70 @@ function setMaleVoice() {
     return;
   }
 
-  maleVoice = voices.find(v => v.name === "Microsoft Stefan - German (Germany)");
+  maleVoice = voices.find(
+    v => v.name === "Microsoft Stefan - German (Germany)"
+  ) || null;
+
   console.log("Ausgewählte Stimme:", maleVoice);
 }
 
 speechSynthesis.onvoiceschanged = setMaleVoice;
 setMaleVoice();
 
+
 /* --------------------------------
-   WICHTIG: Diese Funktion muss
-   VOR speak() im Code stehen:
+   HILFSFUNKTIONEN (ALLGEMEIN)
 ----------------------------------- */
-function setBlendshape(index, value) {
-  if (!model) return;
-  model.traverse(obj => {
-    if (obj.isMesh && obj.morphTargetInfluences && index !== null) {
-      obj.morphTargetInfluences[index] = value;
-    }
-  });
-}
-function lerp(a, b, t) {  // linearer Übergang
+
+// linearer Übergang (wird z. B. für Animationen genutzt)
+function lerp(a, b, t) {
   return a + (b - a) * t;
 }
 
-function getBlendshape(index) {
-  let value = 0;
-  model.traverse(obj => {
-    if (obj.isMesh && obj.morphTargetInfluences) {
-      value = obj.morphTargetInfluences[index] ?? 0;
-    }
-  });
-  return value;
-}
 /* -----------------------------
-   SPEAK – NATÜRLICH & STABIL
+   SPEAK – STABIL (VISEME-BASIERT)
 ----------------------------- */
 function speak(text, slow = false) {
+
   const u = new SpeechSynthesisUtterance(text);
   u.lang = "de-DE";
-  u.rate = slow ? 0.75 : 1.1;
+  u.rate = slow ? 0.85 : 1.0;
 
-  // Verwende männliche Stimme, wenn verfügbar
+  // männliche Stimme, wenn vorhanden
   if (maleVoice) {
     u.voice = maleVoice;
   }
 
-  let lipsyncInterval = null;
-  let t = 0;
+  let visemeTimer = null;
+  let running = false;
+
+  // ruhiger, zyklischer Viseme-Wechsel während des Sprechens
+  const cycle = ["A", "E", "O", "U"];
+  let c = 0;
+  const stepMs = slow ? 220 : 180;
+
+  function startVisemes() {
+    if (running) return;
+    running = true;
+
+    visemeTimer = setInterval(() => {
+      setViseme(cycle[c], 0.9);
+      c = (c + 1) % cycle.length;
+    }, stepMs);
+  }
+
+  function stopVisemes(close = true) {
+    running = false;
+    if (visemeTimer) {
+      clearInterval(visemeTimer);
+      visemeTimer = null;
+    }
+
+    if (close) {
+      setViseme("M", 1);
+      setTimeout(() => setViseme("M", 0), 180);
+    }
+  }
 
   /* -----------------------------
      START DES SPRECHENS
@@ -716,86 +698,50 @@ function speak(text, slow = false) {
     mouthCooldown = false;
     justFinishedSpeaking = false;
 
-    lipsyncInterval = setInterval(() => {
-      t += slow ? 0.05 : 0.1;
+    setViseme("M", 0);
+    startVisemes();
+  };
 
-      // ⭐ Barbarossa Lipsync – KAISER 2.2
-      // natürlich, ruhig, artikuliert
+  /* -----------------------------
+     SATZZEICHEN → MUND ZU
+  ----------------------------- */
+  u.onboundary = e => {
+    if (!e || typeof e.charIndex !== "number") return;
+    const ch = text[e.charIndex];
 
-      // 1) Basisfrequenzen
-      let jaw =
-        Math.abs(Math.sin(t * 1.2)) * 0.26 +
-        Math.abs(Math.sin(t * 0.58)) * 0.18 +
-        Math.abs(Math.sin(t * 2.0)) * 0.08;
+    // weiche Pause
+    if (",;:".includes(ch)) {
+      stopVisemes(true);
+      setTimeout(startVisemes, 180);
+    }
 
-      // 2) leichte Variation
-      jaw += (Math.random() * 0.06 - 0.03);
-
-      // 3) kleine Schließimpulse (deutlichere Artikulation)
-      if (t % 0.18 < 0.02) {
-        jaw *= 0.12;   // stärker & etwas häufiger schließen
-      }
-
-      // 4) Konsonantenimpulse (dezent)
-      if (Math.random() < 0.03) jaw *= 1.25;
-
-      // 5) Begrenzen
-      jaw = Math.min(Math.max(jaw, 0), 0.50);
-
-      // 6) Glättung (realistisch, nicht zitterig)
-      jaw = lerp(getBlendshape(jawOpenIndex), jaw, 0.20);
-
-      // ====== Sekundärformen ======
-      const wide  = jaw * (0.45 + Math.random() * 0.25); // breiter als vorher
-      const puck  = jaw * (0.15 + Math.random() * 0.12);
-
-      // ====== Ausdruck ======
-      const smile = jaw * (0.05 + Math.random() * 0.10); // ruhiger
-      const frown = jaw * (0.04 + Math.random() * 0.10);
-
-      // ⭐ NEU: Oberlippen-Aktivierung (sehr subtil)
-      const upperLipBoost = jaw * 0.18;
-
-      // ====== SETZEN ======
-      setBlendshape(jawOpenIndex, jaw);
-      setBlendshape(mouthWideIndex, wide);
-      setBlendshape(mouthPuckerIndex, puck);
-      setBlendshape(mouthSmileIndex, smile + upperLipBoost);
-      setBlendshape(mouthFrownIndex, frown * 0.9);
-
-    }, 38);
+    // harte Pause / Satzende
+    if (".!?".includes(ch)) {
+      stopVisemes(true);
+    }
   };
 
   /* -----------------------------
      ENDE DES SPRECHENS
   ----------------------------- */
   u.onend = () => {
-    clearInterval(lipsyncInterval);
-    lipsyncInterval = null;
+    stopVisemes(true);
+
     talking = false;
 
-    // ⭐ Satzende → Mund entspannen (nur bei echter Antwort)
-if (STATE === "answer" && /[.!?]\s*$/.test(text.trim())) {
-  setBlendshape(jawOpenIndex, 0);
-  setBlendshape(mouthWideIndex, 0);
-  setBlendshape(mouthPuckerIndex, 0);
-  setBlendshape(mouthSmileIndex, 0);
-  setBlendshape(mouthFrownIndex, 0);
-}
-
-    // ⭐ Cooldown gegen Nachklappern
     justFinishedSpeaking = true;
     mouthCooldown = true;
 
     setTimeout(() => {
       justFinishedSpeaking = false;
       mouthCooldown = false;
-    }, 20);
+    }, 120);
   };
 
   // Start TTS
   speechSynthesis.speak(u);
 }
+
 /* -----------------------------
    RESIZE
 ----------------------------- */
