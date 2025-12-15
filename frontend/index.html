@@ -81,48 +81,49 @@
 let jawOpenIndex = null;
 let mouthWideIndex = null;
 let mouthPuckerIndex = null;
+let mouthSmileIndex = null;
+let mouthFrownIndex = null;
 
 // Audio / Analyse
 let audioCtx, analyser, src;
 
-// Hauptzustände
+// === Hauptzustände ===
 let model, STATE = "idle";
 let lastTranscript = "";
 let talking = false, greeted = false;
-let mouthCooldown = false;   // 🆕 NEU
-  // Zusatzflag: 1 Frame Verzögerung nach Speech-Ende
+let mouthCooldown = false;
 let justFinishedSpeaking = false;
+let recRunning = false;
 
-
-// jawIndex NICHT hier setzen!
-// --> wird später automatisch gesetzt, sobald das Modell geladen wurde
-
+// === Guards (Museums-Härtung) ===
+let wakeGuard = false;               // blockt ersten Klick nach Sleep
+let wakeStabilizing = false;         // blockt Recognition direkt nach Wake
+let recognitionHandled = false;      // verhindert doppeltes recognition.onend
+let askInProgress = false;           // garantiert nur EIN /ask pro Durchlauf
 
 // === Bewegungszustände ===
-let frontalFix = true;              // nach Laden: noch nicht frontal
-let hmNeigen   = false, hmStartTime = 0;
-let rising     = false, riseStartTime = 0;
+let frontalFix = true;               // nach Laden: noch nicht frontal
+let hmNeigen = false, hmStartTime = 0;
+let rising = false, riseStartTime = 0;
 
 // ⭐ Rückkehr nach rechts – nur am ENDE gesteuert!
-let toIdlePose   = false, toIdleStart = 0;
-const toIdleDuration = 3000;        // sanfte Rückkehr (kann z.B. 3000 sein)
+let toIdlePose = false, toIdleStart = 0;
+const toIdleDuration = 3000;
 
 // === Animationszeiten (ms) ===
-const hmDuration   = 8000;         // Hmmm sehr langsam
-const riseDuration = 3000;          // Begrüßung / Antwort → frontal
+const hmDuration = 8000;             // Hmmm sehr langsam
+const riseDuration = 3000;           // Begrüßung / Antwort → frontal
 
 // === Grundposition Avatar ===
-let baseRotY = -0.35;               // leicht nach rechts geneigt
+let baseRotY = -0.35;                // leicht nach rechts geneigt
 let baseRotX = 0.25;
 let baseY = 0;
 
 // 🛡️ NIEMALS gleichzeitig mehrere Bewegungen
-// ❗ Wichtig: toIdlePose DARF NICHT hier gelöscht werden,
-// denn es wird nur von der StateMachine gesetzt!
 function resetMovements() {
   hmNeigen = false;
-  rising   = false;
-  talking  = false;
+  rising = false;
+  talking = false;
 }
 
 /* -----------------------------
@@ -187,9 +188,12 @@ loader.load("./avatar.glb", gltf => {
       for (const [name, idx] of Object.entries(obj.morphTargetDictionary)) {
         const lower = name.toLowerCase();
 
-        if (lower.includes("jaw"))   jawOpenIndex = idx;
-        if (lower.includes("wide"))  mouthWideIndex = idx;
-        if (lower.includes("puck"))  mouthPuckerIndex = idx;
+      if (lower.includes("jaw"))        jawOpenIndex = idx;
+      if (lower.includes("wide"))       mouthWideIndex = idx;
+      if (lower.includes("puck"))       mouthPuckerIndex = idx;
+      if (lower.includes("smile"))      mouthSmileIndex = idx;
+      if (lower.includes("frown"))      mouthFrownIndex = idx;
+
       }
     }
   });
@@ -217,25 +221,25 @@ function setBlendshape(index, value) {
   });
 }
 
-
-  // ====================================
-// ANIMATE – FINAL & STABLE
+// ====================================
+// ANIMATE – FINAL & STABIL
 // ====================================
 function animate() {
   requestAnimationFrame(animate);
   if (!model) return;
 
-  // 🧊 Nur Idle, wenn NICHT gerade frisch gesprochen wurde:
-  if (!talking && !justFinishedSpeaking && !mouthCooldown) {
-      setBlendshape(jawOpenIndex, 0.05);  // dezente Atmung
-      setBlendshape(mouthWideIndex, 0.0);
-      setBlendshape(mouthPuckerIndex, 0.0);
-  }
-
   const now = performance.now();
   const frontalY = -Math.PI / 2;               // frontal
   const rightY   = baseRotY - Math.PI / 2;     // Startpose rechts
   const leftY    = frontalY + 0.25;            // Hmmm = leicht links
+
+  // 🧊 Idle-Mundhaltung nur, wenn NICHT gesprochen wird
+  //    und kein Cooldown / Nachzittern aktiv ist:
+  if (!talking && !justFinishedSpeaking && !mouthCooldown) {
+    setBlendshape(jawOpenIndex, 0.05);  // dezente Atmung
+    setBlendshape(mouthWideIndex, 0.0);
+    setBlendshape(mouthPuckerIndex, 0.0);
+  }
 
   // 0️⃣ START: Ausgangsposition (leicht rechts)
   if (frontalFix) {
@@ -244,7 +248,6 @@ function animate() {
     renderer.render(scene, camera);
     return;
   }
-
 
   // 1️⃣ GREET / ANTWORTBEGINN → FRONTAL
   if (rising) {
@@ -283,45 +286,40 @@ function animate() {
   }
 
   // 6️⃣ ENDE → SANFT ZURÜCK NACH RECHTS
-else if (STATE === "idle" && !talking && !rising) {
-  const breathSpeed = 0.0011 + Math.sin(now * 0.00005) * 0.0004;
-  const breathAmp   = 0.006  + Math.sin(now * 0.00008) * 0.003;
-  model.position.y  = baseY + Math.sin(now * breathSpeed) * breathAmp;
+  else if (STATE === "idle" && !talking && !rising) {
+    const breathSpeed = 0.0011 + Math.sin(now * 0.00005) * 0.0004;
+    const breathAmp   = 0.006  + Math.sin(now * 0.00008) * 0.003;
+    model.position.y  = baseY + Math.sin(now * breathSpeed) * breathAmp;
 
-  model.rotation.y = THREE.MathUtils.lerp(model.rotation.y, rightY, 0.03);
-  model.rotation.x = THREE.MathUtils.lerp(model.rotation.x, baseRotX, 0.03);
-}
+    model.rotation.y = THREE.MathUtils.lerp(model.rotation.y, rightY, 0.03);
+    model.rotation.x = THREE.MathUtils.lerp(model.rotation.x, baseRotX, 0.03);
+  }
 
-// ⭐ Sichtbare, natürliche Blickbewegungen – Version 2 (mehr Dynamik!)
-const driftX = Math.sin(now * 0.0012) * 0.05;   // klar sichtbares Nicken
-const driftY = Math.sin(now * 0.0010) * 0.04;   // klar seitlich „denken“
+  // ⭐ Sehr dezente, würdige Kopf-Driftbewegungen (Kaiser-Version 3.0)
+const driftX = Math.sin(now * 0.0004) * 0.015;   // langsames, kaum sichtbares Nicken
+const driftY = Math.sin(now * 0.0003) * 0.012;   // sehr sanfte Seitbewegung
 
-// X-Achse → Richtung baseRotX + Variation
+// X-Achse → sanft um baseRotX
 model.rotation.x = THREE.MathUtils.lerp(
   model.rotation.x,
   baseRotX + driftX,
-  0.03          // schnellere Reaktion
+  0.02
 );
 
-// Y-Achse → nur wenn kein Hmmm aktiv (NICHT Antwort unterbrechen!)
+// Y-Achse → um fixe Basis (keine Aufschaukelung)
 if (!hmNeigen && !rising) {
+  const baseYawForDrift = (STATE === "idle") ? rightY : frontalY;
+  const targetYaw = baseYawForDrift + driftY;
+
   model.rotation.y = THREE.MathUtils.lerp(
     model.rotation.y,
-    model.rotation.y + driftY,
-    0.018
+    targetYaw,
+    0.02
   );
 }
- // 🟢 OpenAI TTS / SpeechSynthesis steuern Lippen
-// Animate greift NICHT ein, solange talking = true!
-if (!talking) {
-  // hier nur Idle-Mundhaltung, sobald NICHT gesprochen wird:
-  setBlendshape(jawOpenIndex, 0.1);  // leicht offen (Atmung)
-  setBlendshape(mouthWideIndex, 0);
-  setBlendshape(mouthPuckerIndex, 0);
+  renderer.render(scene, camera);
 }
-renderer.render(scene, camera);
-}
-  
+
 /* -----------------------------
    STATE MACHINE – LOGIK (FINAL)
 ----------------------------- */
@@ -332,24 +330,47 @@ if ("webkitSpeechRecognition" in window) {
   recognition.lang = "de-DE";
   recognition.continuous = false;
 
-  // Ergebnis speichern:
   recognition.onresult = e => {
     lastTranscript = e.results[0][0].transcript;
   };
 
-  // Aufnahme beendet:
   recognition.onend = () => {
+
+    // 🛡️ Wake-Stabilizer: Ghost-onend direkt nach Sleep ignorieren
+    if (wakeStabilizing) {
+      console.warn("⏸️ recognition.onend ignoriert (Wake-Stabilizer)");
+      recRunning = false;
+      return;
+    }
+
+    // 🛡️ Ghost-onend ohne aktiven Start ignorieren
+    if (!recRunning) {
+      console.warn("⏸️ recognition.onend ohne recRunning – ignoriert");
+      return;
+    }
+
+    // 🛡️ Doppeltes onend verhindern
+    if (recognitionHandled) {
+      console.warn("🛑 recognition.onend doppelt – ignoriert");
+      return;
+    }
+    recognitionHandled = true;
+
+    recRunning = false;
+
     if (STATE === "listen" && lastTranscript) {
 
-      // 1️⃣ HMMM – Kopf langsam nach links:
+      // 🛡️ nur eine /ask pro Durchlauf
+      if (askInProgress) return;
+      askInProgress = true;
+
+      // 1️⃣ HMMM
       resetMovements();
       STATE = "hmmm";
       hmNeigen = true;
       hmStartTime = performance.now();
       speak("Ähm..... einen Moment", true);
 
-      // Mindestwartezeit einhalten:
-      const MIN_HMMM = 4000;
       setTimeout(() => {
 
         fetch("/ask", {
@@ -360,49 +381,44 @@ if ("webkitSpeechRecognition" in window) {
         .then(r => r.json())
         .then(data => {
 
-          // 2️⃣ ANTWORT BEGINNT → frontal
           resetMovements();
           STATE = "answer";
           rising = true;
           riseStartTime = performance.now();
-          // 🔁 NEUER BLOCK: ECHTES TTS MIT LIPSYNC
-fetch("/tts", {
-  method: "POST",
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({ text: data.answer })
-})
-.then(r => r.json())
-.then(dataTTS => {
-  // 1. Audio + Lippenbewegung
-  playAudioAndLipsync(dataTTS.audio, dataTTS.lipsync);
-})
-.catch(err => {
-  console.error("❌ TTS-Fallback:", err);
-  // Fallback: alte TTS nutzen
-  speak(data.answer);
-});
 
+          fetch("/tts", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ text: data.answer })
+          })
+          .then(r => r.json())
+          .then(dataTTS => {
+            playAudioAndLipsync(dataTTS.audio, dataTTS.lipsync);
+          })
+          .catch(() => {
+            speak(data.answer);
+          });
 
-          // 3️⃣ ANTWORT FERTIG → jetzt erst zurück nach rechts!
           const waitUntilDone = setInterval(() => {
             if (!talking && !rising) {
               clearInterval(waitUntilDone);
               resetMovements();
               greeted = false;
               STATE = "idle";
-
-              // ⭐ TRIGGER → block 4 aktiviert RECHTS-NEIGUNG!
+              askInProgress = false;
               toIdlePose = true;
               toIdleStart = performance.now();
             }
           }, 200);
+
         })
         .catch(() => {
+          askInProgress = false;
           resetMovements();
           STATE = "idle";
         });
 
-      }, MIN_HMMM);
+      }, 4000);
 
     } else {
       resetMovements();
@@ -410,10 +426,97 @@ fetch("/tts", {
     }
   };
 }
-   /* -----------------------------
+
+/* ===============================
+   🏛️ MUSEUMS-RESET (Wake / Fokus)
+================================ */
+
+function museumReset(reason = "") {
+  console.log("🛡️ Museum-Reset", reason);
+
+  // 🛡️ Wake-Guard: erster Klick nach Sleep wird ignoriert
+  wakeGuard = true;
+  setTimeout(() => {
+    wakeGuard = false;
+    console.log("🟢 Wake-Guard aufgehoben");
+  }, 600);
+
+  // 🛡️ Wake-Stabilisierung: Recognition nach Sleep blocken
+  wakeStabilizing = true;
+  setTimeout(() => {
+    wakeStabilizing = false;
+    console.log("🟢 Wake stabilisiert");
+  }, 1200);
+
+  // --- Speech sauber abbrechen ---
+  try {
+    speechSynthesis.cancel();
+  } catch (e) {}
+
+  if (typeof recognition !== "undefined" && recognition && recRunning) {
+    try {
+      recognition.abort();
+    } catch (e) {}
+    recRunning = false;
+  }
+
+  // --- State Machine auf Urzustand ---
+  STATE = "idle";
+  greeted = false;
+  talking = false;
+  rising = false;
+  hmNeigen = false;
+  frontalFix = false;
+
+  lastTranscript = "";
+  justFinishedSpeaking = false;
+  mouthCooldown = false;
+
+  // Guards zurücksetzen
+  recognitionHandled = false;
+  askInProgress = false;
+
+  // --- Mund neutralisieren ---
+  if (jawOpenIndex !== null) {
+    setBlendshape(jawOpenIndex, 0);
+    setBlendshape(mouthWideIndex, 0);
+    setBlendshape(mouthPuckerIndex, 0);
+    setBlendshape(mouthSmileIndex, 0);
+    setBlendshape(mouthFrownIndex, 0);
+  }
+
+  // --- Kopf & Position neutral ---
+  if (model) {
+    model.position.y = baseY;
+    model.rotation.x = baseRotX;
+    model.rotation.y = baseRotY - Math.PI / 2;
+  }
+}
+
+// 🔁 Trigger nur im echten Idle
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden && STATE === "idle" && !talking && !recRunning) {
+    museumReset("visibilitychange");
+  }
+});
+
+window.addEventListener("focus", () => {
+  if (STATE === "idle" && !talking && !recRunning) {
+    museumReset("focus");
+  }
+});
+
+
+/* -----------------------------
    BUTTON – GREET & LISTEN
 ----------------------------- */
 document.getElementById("micBtn").onclick = () => {
+
+  // 🛡️ Wake-Guard: erster Klick nach Ruhemodus tut nichts
+  if (wakeGuard) {
+    console.log("⏳ Klick ignoriert (Wake-Guard)");
+    return;
+  }
 
   // Erste Betätigung → Begrüßung
   if (!greeted) {
@@ -421,28 +524,45 @@ document.getElementById("micBtn").onclick = () => {
     greeted = true;
     STATE = "greet";
 
-    frontalFix = false;               // ab jetzt Bewegung erlaubt
+    frontalFix = false;
     rising = true;
     riseStartTime = performance.now();
 
     speak(
-      "Seid gegrüßt, mein Freund. Ich bin Friedrich Barbarossa, nach fast neunhundert Jahren im Kaiserberg zu Lautern erwacht. Was ist Euer Begehr?",
+      "Seid gegrüßt, mein Freund. Ich bin Friedrich Barbarossa, nach fast neunhundert Jahren im Kaiserberg zu Lautern erwacht. Was ist Euer Begehr.",
       false
     );
     return;
   }
 
-  // Spätere Betätigung → Spracherkennung starten
+  // Spracherkennung vorhanden?
   if (!recognition) {
     alert("Spracherkennung wird nicht unterstützt.");
     return;
   }
 
+  if (recRunning) {
+    console.warn("❗RECOGNITION BLOCKED — already running");
+    return;
+  }
+
+  // 🛡️ Guards für neuen Durchlauf zurücksetzen
+  recognitionHandled = false;
+  askInProgress = false;
+
   resetMovements();
   lastTranscript = "";
   STATE = "listen";
-  recognition.start();
+
+  try {
+    recognition.start();
+    recRunning = true;
+  } catch (e) {
+    console.warn("❗Recognition start error:", e);
+    recRunning = false;
+  }
 };
+
 /* -----------------------------
    1) MÄNNLICHE STIMME FEST SETZEN  (GLOBAL!)
 ----------------------------- */
@@ -488,7 +608,6 @@ function getBlendshape(index) {
   });
   return value;
 }
-
 /* -----------------------------
    SPEAK – NATÜRLICH & STABIL
 ----------------------------- */
@@ -496,11 +615,18 @@ function speak(text, slow = false) {
   const u = new SpeechSynthesisUtterance(text);
   u.lang = "de-DE";
   u.rate = slow ? 0.75 : 1.1;
-  if (maleVoice) u.voice = maleVoice;
+
+  // Verwende männliche Stimme, wenn verfügbar
+  if (maleVoice) {
+    u.voice = maleVoice;
+  }
 
   let lipsyncInterval = null;
   let t = 0;
 
+  /* -----------------------------
+     START DES SPRECHENS
+  ----------------------------- */
   u.onstart = () => {
     talking = true;
     mouthCooldown = false;
@@ -509,45 +635,83 @@ function speak(text, slow = false) {
     lipsyncInterval = setInterval(() => {
       t += slow ? 0.05 : 0.1;
 
-      let jaw = Math.abs(Math.sin(t)) * 0.45;
-      jaw += (Math.random() * 0.12 - 0.06);
-      jaw = Math.min(Math.max(jaw, 0), 0.45);
-      if (Math.random() < 0.03) jaw *= 0.25;
+      // ⭐ Barbarossa Lipsync – KAISER 2.2
+      // natürlich, ruhig, artikuliert
 
-      const wide = jaw * 0.32;
-      const puck = jaw * 0.18;
+      // 1) Basisfrequenzen
+      let jaw =
+        Math.abs(Math.sin(t * 1.2)) * 0.26 +
+        Math.abs(Math.sin(t * 0.58)) * 0.18 +
+        Math.abs(Math.sin(t * 2.0)) * 0.08;
 
+      // 2) leichte Variation
+      jaw += (Math.random() * 0.06 - 0.03);
+
+      // 3) kleine Schließimpulse (deutlichere Artikulation)
+      if (t % 0.18 < 0.02) {
+        jaw *= 0.12;   // stärker & etwas häufiger schließen
+      }
+
+      // 4) Konsonantenimpulse (dezent)
+      if (Math.random() < 0.03) jaw *= 1.25;
+
+      // 5) Begrenzen
+      jaw = Math.min(Math.max(jaw, 0), 0.50);
+
+      // 6) Glättung (realistisch, nicht zitterig)
+      jaw = lerp(getBlendshape(jawOpenIndex), jaw, 0.20);
+
+      // ====== Sekundärformen ======
+      const wide  = jaw * (0.45 + Math.random() * 0.25); // breiter als vorher
+      const puck  = jaw * (0.15 + Math.random() * 0.12);
+
+      // ====== Ausdruck ======
+      const smile = jaw * (0.05 + Math.random() * 0.10); // ruhiger
+      const frown = jaw * (0.04 + Math.random() * 0.10);
+
+      // ⭐ NEU: Oberlippen-Aktivierung (sehr subtil)
+      const upperLipBoost = jaw * 0.18;
+
+      // ====== SETZEN ======
       setBlendshape(jawOpenIndex, jaw);
       setBlendshape(mouthWideIndex, wide);
       setBlendshape(mouthPuckerIndex, puck);
+      setBlendshape(mouthSmileIndex, smile + upperLipBoost);
+      setBlendshape(mouthFrownIndex, frown * 0.9);
+
     }, 38);
   };
 
-u.onend = () => {
-  clearInterval(lipsyncInterval);
-  lipsyncInterval = null;
-  talking = false;
+  /* -----------------------------
+     ENDE DES SPRECHENS
+  ----------------------------- */
+  u.onend = () => {
+    clearInterval(lipsyncInterval);
+    lipsyncInterval = null;
+    talking = false;
 
-  // Sofort in Idle
-  setBlendshape(jawOpenIndex, 0.05);
+    // ⭐ Satzende → Mund entspannen (nur bei echter Antwort)
+if (STATE === "answer" && /[.!?]\s*$/.test(text.trim())) {
+  setBlendshape(jawOpenIndex, 0);
   setBlendshape(mouthWideIndex, 0);
   setBlendshape(mouthPuckerIndex, 0);
+  setBlendshape(mouthSmileIndex, 0);
+  setBlendshape(mouthFrownIndex, 0);
+}
 
-  // Cooldown für animate(), aber micro-delay!
-  justFinishedSpeaking = true;
-  mouthCooldown = true;
+    // ⭐ Cooldown gegen Nachklappern
+    justFinishedSpeaking = true;
+    mouthCooldown = true;
 
-  // ⏱ dieser Trick killt das Geister-Zittern:
-  setTimeout(() => {
-    justFinishedSpeaking = false;
-    mouthCooldown = false;
-  }, 20); // nur 20ms → fühlbar, aber unsichtbar
-};
+    setTimeout(() => {
+      justFinishedSpeaking = false;
+      mouthCooldown = false;
+    }, 20);
+  };
 
-  // GANZ WICHTIG!
+  // Start TTS
   speechSynthesis.speak(u);
-}  // <== ENDE SPEAK – Klammern stimmen!
-
+}
 /* -----------------------------
    RESIZE
 ----------------------------- */
