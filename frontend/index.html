@@ -165,8 +165,13 @@ const loader = new THREE.GLTFLoader();
 loader.load("./avatar.glb", gltf => {
 
   model = gltf.scene;
+  scene.add(model);
 
-  // === Größe & Position – bleibt wie bisher ===
+  // 🔎 DEBUG – NUR KLON
+  window.__AVATAR_MODEL__ = model;
+});
+
+   // === Größe & Position – bleibt wie bisher ===
   const box = new THREE.Box3().setFromObject(model);
   const size = box.getSize(new THREE.Vector3());
   model.scale.setScalar((1.5 / Math.max(size.x, size.y, size.z)) * 0.8);
