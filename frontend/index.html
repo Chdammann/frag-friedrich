@@ -563,7 +563,6 @@ function museumReset(reason = "") {
   askInProgress = false;
 
   // --- Mund neutralisieren (VISEME) ---
-  // Keine alten Blendshapes mehr ansprechen: sie würden gegen Viseme-Steuerung arbeiten.
   try {
     if (typeof setViseme === "function") {
       setViseme("M", 0);
@@ -578,7 +577,11 @@ function museumReset(reason = "") {
   }
 }
 
-// 🔁 Trigger nur im echten Idle
+
+/* ===============================
+   🔁 MUSEUMS-TRIGGER (Idle-only)
+================================ */
+
 document.addEventListener("visibilitychange", () => {
   if (!document.hidden && STATE === "idle" && !talking && !recRunning) {
     museumReset("visibilitychange");
@@ -590,6 +593,15 @@ window.addEventListener("focus", () => {
     museumReset("focus");
   }
 });
+
+
+/* ===============================
+   🎤 RECOGNITION START (SAUBER)
+================================ */
+
+function startRecognition() {
+
+  if (recRunning) {
     console.warn("❗RECOGNITION BLOCKED — already running");
     return;
   }
@@ -609,7 +621,7 @@ window.addEventListener("focus", () => {
     console.warn("❗Recognition start error:", e);
     recRunning = false;
   }
-};
+}
 
 
 /* -----------------------------
