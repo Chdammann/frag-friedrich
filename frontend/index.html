@@ -696,7 +696,7 @@ function lerp(a, b, t) {
 }
 
 /* -----------------------------
-   SPEAK – FINAL TUNED (VISEME)
+   SPEAK – FINAL NATURAL PAUSE (VISEME)
 ----------------------------- */
 function speak(text, slow = false) {
 
@@ -708,26 +708,38 @@ function speak(text, slow = false) {
   let timer = null;
   let active = false;
 
-  // Viseme-Zyklus (E ≈ I)
   const cycle = ["A", "E", "O", "U"];
   let targetIdx = 0;
 
-  // ⚖️ Tempo & Rundung (minimal schneller)
-  const stepMs = slow ? 150 : 120;   // ⬅️ leicht schneller
-  const lerpFactor = 0.36;           // ⬅️ etwas direkter, aber rund
+  // Grundtempo & Rundung
+  const stepMs = slow ? 150 : 120;
+  const lerpFactor = 0.34;
 
-  function resetAll() {
+  // Grundhaltung: Mund eher geschlossen
+  const baseClose = 0.04;
+
+  function softenAll(factor = 0.85) {
     if (!visemeMesh || !visemeMesh.morphTargetInfluences) return;
-    visemeMesh.morphTargetInfluences.fill(0);
+    const inf = visemeMesh.morphTargetInfluences;
+    for (let i = 0; i < inf.length; i++) {
+      inf[i] *= factor;
+      if (inf[i] < baseClose) inf[i] = baseClose;
+    }
+  }
+
+  function resetToClosed() {
+    if (!visemeMesh || !visemeMesh.morphTargetInfluences) return;
+    const inf = visemeMesh.morphTargetInfluences;
+    inf.fill(0);
+    inf[visemeIndex.M] = baseClose; // ruhige, leicht geschlossene Pose
   }
 
   function chooseNextViseme() {
-    // A und U bevorzugen, O/E seltener
     const r = Math.random();
-    if (r < 0.40) return "A";
-    if (r < 0.65) return "U";
-    if (r < 0.82) return "E"; // „I“-ähnlich → seltener
-    return "O";               // stark → am seltensten
+    if (r < 0.42) return "A";
+    if (r < 0.68) return "U";
+    if (r < 0.84) return "E"; // ≈ I
+    return "O";
   }
 
   function startVisemes() {
@@ -739,34 +751,32 @@ function speak(text, slow = false) {
     timer = setInterval(() => {
       if (!active) return;
 
-      // häufiger Wechsel für mehr Leben
-      if (Math.random() < 0.50) {
+      // Visem gelegentlich wechseln
+      if (Math.random() < 0.45) {
         targetIdx = visemeIndex[chooseNextViseme()];
       }
 
-      // Grundöffnung
-      let target = 0.56 + Math.random() * 0.18; // 0.56–0.74
+      // Zielöffnung (moderat)
+      let target = 0.50 + Math.random() * 0.18; // 0.50–0.68
 
-      // 🔹 O stark dämpfen
+      // O & E dämpfen
       if (Object.keys(visemeIndex).find(k => visemeIndex[k] === targetIdx) === "O") {
         target *= 0.65;
       }
-
-      // 🔹 E (≈ I) moderat dämpfen
       if (Object.keys(visemeIndex).find(k => visemeIndex[k] === targetIdx) === "E") {
         target *= 0.75;
       }
 
-      const influences = visemeMesh.morphTargetInfluences;
-      for (let i = 0; i < influences.length; i++) {
-        const desired = (i === targetIdx) ? target : 0;
-        influences[i] += (desired - influences[i]) * lerpFactor;
+      const inf = visemeMesh.morphTargetInfluences;
+      for (let i = 0; i < inf.length; i++) {
+        const desired = (i === targetIdx) ? target : baseClose;
+        inf[i] += (desired - inf[i]) * lerpFactor;
       }
 
     }, stepMs);
   }
 
-  function stopVisemes(finalClose = true) {
+  function pauseVisemes(duration = 140) {
     active = false;
 
     if (timer) {
@@ -774,17 +784,21 @@ function speak(text, slow = false) {
       timer = null;
     }
 
-    if (!visemeMesh || !visemeMesh.morphTargetInfluences) return;
+    // sanft auslaufen lassen, KEIN Schnappen
+    softenAll(0.82);
 
-    // 🔒 HARTE RUHE – verhindert letzten Nachklapper
-    resetAll();
+    setTimeout(() => {
+      if (!active) startVisemes();
+    }, duration);
+  }
 
-    if (finalClose) {
-      setViseme("M", 0.28);          // sehr sanfter Schluss
-      setTimeout(() => {
-        resetAll();                  // endgültiger Lock
-      }, 110);
+  function stopAll() {
+    active = false;
+    if (timer) {
+      clearInterval(timer);
+      timer = null;
     }
+    resetToClosed();
   }
 
   /* -----------------------------
@@ -795,31 +809,31 @@ function speak(text, slow = false) {
     mouthCooldown = false;
     justFinishedSpeaking = false;
 
-    resetAll();
+    resetToClosed();
     startVisemes();
   };
 
   /* -----------------------------
-     SATZZEICHEN (Fallback)
+     SATZZEICHEN → WEICHE PAUSE
   ----------------------------- */
   u.onboundary = e => {
     if (!active || !e || typeof e.charIndex !== "number") return;
     const ch = text[e.charIndex];
 
     if (",;:".includes(ch)) {
-      stopVisemes(true);
-      setTimeout(startVisemes, 110);
+      pauseVisemes(120);   // kleine Denkpause
     }
+
     if (".!?".includes(ch)) {
-      stopVisemes(true);
+      pauseVisemes(200);   // längere Pause, aber kein Zuklappen
     }
   };
 
   /* -----------------------------
-     ENDE
+     ENDE – RUHIG GESCHLOSSEN
   ----------------------------- */
   u.onend = () => {
-    stopVisemes(true);
+    stopAll();
 
     talking = false;
     justFinishedSpeaking = true;
@@ -828,7 +842,7 @@ function speak(text, slow = false) {
     setTimeout(() => {
       justFinishedSpeaking = false;
       mouthCooldown = false;
-    }, 140);
+    }, 160);
   };
 
   speechSynthesis.speak(u);
