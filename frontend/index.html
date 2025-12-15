@@ -173,14 +173,18 @@ const visemeIndex = {
   M: 4
 };
 
-// === GLTF laden ===
+/* --------------------------------------------------
+   MODEL LADEN + VISEME-MESH FINDEN
+   (KLON – Viseme-Version)
+-------------------------------------------------- */
+
 const loader = new THREE.GLTFLoader();
 loader.load("./avatar.glb", gltf => {
 
   model = gltf.scene;
   scene.add(model);
 
-  // --- Viseme-Mesh finden (SkinnedMesh!) ---
+  // --- Viseme-Mesh finden (SkinnedMesh oder Mesh mit MorphTargets) ---
   visemeMesh = null;
   model.traverse(obj => {
     if ((obj.isMesh || obj.isSkinnedMesh) && obj.morphTargetDictionary) {
@@ -198,9 +202,7 @@ loader.load("./avatar.glb", gltf => {
 
   // --- Animation starten (GENAU EINMAL) ---
   animate();
-
-}); // ← loader.load sauber beendet
-
+});
 
 /* --------------------------------------------------
    VISEME SETZEN – EXKLUSIV
