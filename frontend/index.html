@@ -125,7 +125,68 @@ function resetMovements() {
   rising = false;
   talking = false;
 }
-setViseme("A", 1);
+/* --------------------------------------------------
+   MODEL LADEN + VISEME-MESH FINDEN
+   (KLON – Viseme-Version)
+-------------------------------------------------- */
+
+// === Viseme-Referenz (global nutzbar) ===
+let visemeMesh = null;
+
+// === Feste Viseme-Indizes aus Blender ===
+const visemeIndex = {
+  A: 0,
+  E: 1,
+  O: 2,
+  U: 3,
+  M: 4
+};
+
+// === GLTF laden ===
+const loader = new THREE.GLTFLoader();
+loader.load("./avatar.glb", gltf => {
+
+  model = gltf.scene;
+  scene.add(model);
+
+  // --- Viseme-Mesh finden (SkinnedMesh!) ---
+  visemeMesh = null;
+  model.traverse(obj => {
+    if ((obj.isMesh || obj.isSkinnedMesh) && obj.morphTargetDictionary) {
+      console.log("✔ Viseme-Träger gefunden:", obj.name, obj.morphTargetDictionary);
+      if (!visemeMesh) visemeMesh = obj;
+    }
+  });
+
+  if (!visemeMesh) {
+    console.error("❌ KEIN Viseme-Mesh gefunden – GLB prüfen!");
+  }
+
+  // --- Ladeanzeige aus ---
+  document.getElementById("loading").style.display = "none";
+
+  // --- Animation starten (GENAU EINMAL) ---
+  animate();
+
+}); // ← loader.load sauber beendet
+
+
+/* --------------------------------------------------
+   VISEME SETZEN – EXKLUSIV
+-------------------------------------------------- */
+function setViseme(key, value) {
+  if (!visemeMesh || !visemeMesh.morphTargetInfluences) return;
+
+  const idx = visemeIndex[key];
+  if (idx === undefined) return;
+
+  // alle Viseme schließen
+  visemeMesh.morphTargetInfluences.fill(0);
+
+  // Ziel-Visem setzen
+  visemeMesh.morphTargetInfluences[idx] = value;
+}
+
 
 // ====================================
 // ANIMATE – FINAL & STABIL
