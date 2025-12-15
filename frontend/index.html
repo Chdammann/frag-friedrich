@@ -696,7 +696,7 @@ function lerp(a, b, t) {
 }
 
 /* -----------------------------
-   SPEAK – FEINTUNING (VISEME)
+   SPEAK – FINAL STABIL (VISEME)
 ----------------------------- */
 function speak(text, slow = false) {
 
@@ -704,42 +704,40 @@ function speak(text, slow = false) {
   u.lang = "de-DE";
   u.rate = slow ? 0.85 : 1.0;
 
-  if (maleVoice) {
-    u.voice = maleVoice;
-  }
+  if (maleVoice) u.voice = maleVoice;
 
   let visemeTimer = null;
-  let running = false;
+  let speakingActive = false;
 
-  // Würdige, aber lebendige Viseme-Basis
   const cycle = ["A", "E", "O", "U"];
   let c = Math.floor(Math.random() * cycle.length);
   let holdCount = 0;
 
-  // Rhythmus leicht beschleunigt für mehr Leben
   const stepMs = slow ? 240 : 195;
 
   function startVisemes() {
-    if (running) return;
-    if (!visemeMesh || !visemeMesh.morphTargetInfluences) return;
+    if (visemeTimer || !visemeMesh) return;
 
-    running = true;
+    speakingActive = true;
 
     visemeTimer = setInterval(() => {
+      if (!speakingActive) return;
 
-      // 🔹 etwas größere Öffnung
-      const target = 0.52 + Math.random() * 0.22; // 0.52–0.74
+      // Basisöffnung
+      let target = 0.52 + Math.random() * 0.22; // 0.52–0.74
 
-      // 🔹 weiche Überblendung
+      // 🔹 O-Visem bewusst dämpfen
+      if (cycle[c] === "O") {
+        target *= 0.75;
+      }
+
       const idx = visemeIndex[cycle[c]];
       const current = visemeMesh.morphTargetInfluences[idx] || 0;
-      const smooth = current + (target - current) * 0.33;
+      const smooth = current + (target - current) * 0.35;
 
       setViseme(cycle[c], smooth);
 
       holdCount++;
-
-      // 🔹 Visemwechsel erzwingen, falls es „klebt“
       if (holdCount >= 3 || Math.random() < 0.42) {
         c = (c + 1) % cycle.length;
         holdCount = 0;
@@ -748,69 +746,61 @@ function speak(text, slow = false) {
     }, stepMs);
   }
 
-  function stopVisemes(close = true, pause = 170) {
-    running = false;
+  function stopAllVisemes(finalClose = true) {
+    speakingActive = false;
 
     if (visemeTimer) {
       clearInterval(visemeTimer);
       visemeTimer = null;
     }
 
-    if (!visemeMesh || !visemeMesh.morphTargetInfluences) return;
+    if (!visemeMesh) return;
 
-    // 🔒 alle aktiven Viseme sofort beruhigen
     visemeMesh.morphTargetInfluences.fill(0);
 
-    if (close) {
-      // 🔹 sehr kurzer, sehr weicher Mundschluss
-      setViseme("M", 0.38);
-
+    if (finalClose) {
+      setViseme("M", 0.35);
       setTimeout(() => {
         visemeMesh.morphTargetInfluences.fill(0);
-      }, pause);
+      }, 160);
     }
   }
 
   /* -----------------------------
-     START DES SPRECHENS
+     START
   ----------------------------- */
   u.onstart = () => {
     talking = true;
     mouthCooldown = false;
     justFinishedSpeaking = false;
-
-    if (visemeMesh && visemeMesh.morphTargetInfluences) {
-      setViseme("M", 0);
-      startVisemes();
-    }
+    setViseme("M", 0);
+    startVisemes();
   };
 
   /* -----------------------------
-     SATZZEICHEN → MUND ZU
+     SATZZEICHEN-FALLBACK
   ----------------------------- */
   u.onboundary = e => {
+    if (!speakingActive) return;
     if (!e || typeof e.charIndex !== "number") return;
-    if (!visemeMesh || !visemeMesh.morphTargetInfluences) return;
 
     const ch = text[e.charIndex];
 
-    // weiche Pause
     if (",;:".includes(ch)) {
-      stopVisemes(true, 140);
+      stopAllVisemes(true);
       setTimeout(startVisemes, 140);
     }
 
-    // harte Pause / Satzende
     if (".!?".includes(ch)) {
-      stopVisemes(true, 210);
+      stopAllVisemes(true);
     }
   };
 
   /* -----------------------------
-     ENDE DES SPRECHENS
+     ENDE
   ----------------------------- */
   u.onend = () => {
-    stopVisemes(true, 190);
+    stopAllVisemes(true);
 
     talking = false;
     justFinishedSpeaking = true;
@@ -824,7 +814,6 @@ function speak(text, slow = false) {
 
   speechSynthesis.speak(u);
 }
-
 
 /* -----------------------------
    RESIZE
