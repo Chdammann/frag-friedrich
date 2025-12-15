@@ -696,7 +696,7 @@ function lerp(a, b, t) {
 }
 
 /* -----------------------------
-   SPEAK – FINAL SMOOTH (VISEME)
+   SPEAK – FINAL BALANCED (VISEME)
 ----------------------------- */
 function speak(text, slow = false) {
 
@@ -706,13 +706,15 @@ function speak(text, slow = false) {
   if (maleVoice) u.voice = maleVoice;
 
   let timer = null;
-  let active = false;        // 🔒 Kill-Switch gegen Nachklappern
-  let phase = 0;             // kontinuierliche Phase
-  let targetIdx = 0;
+  let active = false;
 
   const cycle = ["A", "E", "O", "U"];
-  const stepMs = slow ? 240 : 200;
-  const lerpFactor = 0.18;   // 🔹 runder als zuvor (kleiner = weicher)
+  let targetIdx = 0;
+
+  // ⚖️ ausgewogene Parameter
+  const stepMs = slow ? 160 : 130;   // ⬅️ deutlich schneller
+  const lerpFactor = 0.32;           // ⬅️ direkter, aber noch weich
+  const phaseStep = 0.9;             // ⬅️ kein Zeitlupen-Gefühl
 
   function resetAll() {
     if (!visemeMesh || !visemeMesh.morphTargetInfluences) return;
@@ -723,26 +725,23 @@ function speak(text, slow = false) {
     if (active || !visemeMesh || !visemeMesh.morphTargetInfluences) return;
 
     active = true;
-    phase = 0;
     targetIdx = visemeIndex[cycle[Math.floor(Math.random() * cycle.length)]];
 
     timer = setInterval(() => {
       if (!active) return;
 
-      phase += 0.35; // kontinuierlicher Fortschritt
-
-      // Ziel-Visem wechseln, wenn Phase voll
-      if (phase >= 1) {
-        phase = 0;
+      // Ziel wechseln
+      if (Math.random() < 0.45) {
         const next = cycle[Math.floor(Math.random() * cycle.length)];
         targetIdx = visemeIndex[next];
       }
 
-      // 🔹 Zielstärke (O bewusst gedämpft)
-      let target = 0.55 + Math.random() * 0.18; // 0.55–0.73
-      if (cycle[targetIdx] === "O") target *= 0.72;
+      // Zielstärke
+      let target = 0.55 + Math.random() * 0.20; // 0.55–0.75
+      if (Object.keys(visemeIndex)[targetIdx] === "O") {
+        target *= 0.75;
+      }
 
-      // 🔹 weiches Ein- & Ausblenden
       const influences = visemeMesh.morphTargetInfluences;
       for (let i = 0; i < influences.length; i++) {
         const desired = (i === targetIdx) ? target : 0;
@@ -760,14 +759,11 @@ function speak(text, slow = false) {
       timer = null;
     }
 
-    if (!visemeMesh || !visemeMesh.morphTargetInfluences) return;
-
-    // 🔒 sofortige Ruhe – KEIN Ausklingen
     resetAll();
 
     if (finalClose) {
-      setViseme("M", 0.32);  // sehr sanfter Schluss
-      setTimeout(resetAll, 140);
+      setViseme("M", 0.3);
+      setTimeout(resetAll, 120);
     }
   }
 
@@ -784,15 +780,15 @@ function speak(text, slow = false) {
   };
 
   /* -----------------------------
-     SATZZEICHEN (Fallback)
+     SATZZEICHEN
   ----------------------------- */
   u.onboundary = e => {
     if (!active || !e || typeof e.charIndex !== "number") return;
-
     const ch = text[e.charIndex];
+
     if (",;:".includes(ch)) {
       stopVisemes(true);
-      setTimeout(startVisemes, 140);
+      setTimeout(startVisemes, 120);
     }
     if (".!?".includes(ch)) {
       stopVisemes(true);
@@ -812,7 +808,7 @@ function speak(text, slow = false) {
     setTimeout(() => {
       justFinishedSpeaking = false;
       mouthCooldown = false;
-    }, 160);
+    }, 140);
   };
 
   speechSynthesis.speak(u);
