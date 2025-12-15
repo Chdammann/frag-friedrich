@@ -646,15 +646,21 @@ function lerp(a, b, t) {
 }
 
 /* -----------------------------
-   SPEAK – STABIL (VISEME-BASIERT)
+   SPEAK – STABIL (VISEME-BASIERT, GUARD)
 ----------------------------- */
 function speak(text, slow = false) {
+
+  // 🛡️ HARTE ABSICHERUNG GEGEN FRÜHAUFRUFE
+  // speak() darf existieren, auch wenn das Modell noch nicht da ist
+  const visemeReady =
+    typeof setViseme === "function" &&
+    typeof visemeMesh !== "undefined" &&
+    visemeMesh !== null;
 
   const u = new SpeechSynthesisUtterance(text);
   u.lang = "de-DE";
   u.rate = slow ? 0.85 : 1.0;
 
-  // männliche Stimme, wenn vorhanden
   if (maleVoice) {
     u.voice = maleVoice;
   }
@@ -662,13 +668,12 @@ function speak(text, slow = false) {
   let visemeTimer = null;
   let running = false;
 
-  // ruhiger, zyklischer Viseme-Wechsel während des Sprechens
   const cycle = ["A", "E", "O", "U"];
   let c = 0;
   const stepMs = slow ? 220 : 180;
 
   function startVisemes() {
-    if (running) return;
+    if (!visemeReady || running) return;
     running = true;
 
     visemeTimer = setInterval(() => {
@@ -684,7 +689,7 @@ function speak(text, slow = false) {
       visemeTimer = null;
     }
 
-    if (close) {
+    if (visemeReady && close) {
       setViseme("M", 1);
       setTimeout(() => setViseme("M", 0), 180);
     }
@@ -698,24 +703,24 @@ function speak(text, slow = false) {
     mouthCooldown = false;
     justFinishedSpeaking = false;
 
-    setViseme("M", 0);
-    startVisemes();
+    if (visemeReady) {
+      setViseme("M", 0);
+      startVisemes();
+    }
   };
 
   /* -----------------------------
      SATZZEICHEN → MUND ZU
   ----------------------------- */
   u.onboundary = e => {
-    if (!e || typeof e.charIndex !== "number") return;
+    if (!visemeReady || !e || typeof e.charIndex !== "number") return;
     const ch = text[e.charIndex];
 
-    // weiche Pause
     if (",;:".includes(ch)) {
       stopVisemes(true);
       setTimeout(startVisemes, 180);
     }
 
-    // harte Pause / Satzende
     if (".!?".includes(ch)) {
       stopVisemes(true);
     }
@@ -738,7 +743,6 @@ function speak(text, slow = false) {
     }, 120);
   };
 
-  // Start TTS
   speechSynthesis.speak(u);
 }
 
