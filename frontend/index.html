@@ -726,7 +726,7 @@ function speak(text, slow = false) {
     visemeTimer = setInterval(() => {
 
       // 🔹 Stärke leicht variieren (vermeidet Robotik)
-      const strength = 0.65 + Math.random() * 0.25; // 0.65–0.90
+      const strength = 0.40 + Math.random() * 0.20; // 0.65–0.90
       setViseme(cycle[c], strength);
 
       // 🔹 Nicht jedes Mal wechseln → natürlicher
