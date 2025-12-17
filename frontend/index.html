@@ -91,6 +91,8 @@ let talking = false, greeted = false;
 let mouthCooldown = false;
 let justFinishedSpeaking = false;
 let recRunning = false;
+let runId = 0;  // 🔒 erhöht sich bei jedem neuen Durchlauf (Frage+Antwort)
+
 
 // === Guards (Museums-Härtung) ===
 let wakeGuard = false;               // blockt ersten Klick nach Sleep
@@ -599,7 +601,17 @@ window.addEventListener("focus", () => {
    🎤 RECOGNITION START (SAUBER)
 ================================ */
 
-function startRecognition() {
+/* ===============================
+   🎤 RECOGNITION START (SAUBER)
+================================ */
+
+function startRecognition(run) {
+
+  // ❌ veralteter Durchlauf → ignorieren
+  if (run !== runId) {
+    console.warn("❌ startRecognition ignored (stale run)", run);
+    return;
+  }
 
   if (recRunning) {
     console.warn("❗RECOGNITION BLOCKED — already running");
@@ -615,13 +627,40 @@ function startRecognition() {
   STATE = "listen";
 
   try {
+    // 🔒 lokale Bindung für Callbacks
+    const localRun = run;
+
+    recognition.onresult = (e) => {
+      if (localRun !== runId) return;   // ❌ alter Run
+      recognitionHandled = true;
+
+      lastTranscript = e.results[0][0].transcript;
+      console.log("🎤 RESULT (run)", localRun, lastTranscript);
+
+      handleQuestion(lastTranscript);
+    };
+
+    recognition.onend = () => {
+      if (localRun !== runId) return;   // ❌ alter Run
+      recRunning = false;
+      console.log("🎤 END (run)", localRun);
+    };
+
+    recognition.onerror = (e) => {
+      if (localRun !== runId) return;   // ❌ alter Run
+      recRunning = false;
+      console.warn("🎤 ERROR (run)", localRun, e);
+    };
+
     recognition.start();
     recRunning = true;
+
   } catch (e) {
     console.warn("❗Recognition start error:", e);
     recRunning = false;
   }
 }
+
 
 /* -----------------------------
    BUTTON – GREET & LISTEN (STABIL)
@@ -630,7 +669,7 @@ const micBtn = document.getElementById("micBtn");
 
 micBtn.onclick = () => {
 
-  // 1️⃣ ERSTER KLICK → BEGRÜSSUNG
+  // 1️⃣ ERSTER KLICK → BEGRÜSSUNG (kein runId++)
   if (!greeted) {
     greeted = true;
     STATE = "greet";
@@ -648,18 +687,21 @@ micBtn.onclick = () => {
     return;
   }
 
-  // 🔇 NUR Sprache stoppen – kein Totalreset
+  // ✅ Ab hier startet ein neuer Frage→Antwort-Zyklus
+  runId++;
+  const myRun = runId;
+  console.log("RUN START", myRun);
+
+  // 🔇 nur Sprache stoppen (kein Totalreset)
   speechSynthesis.cancel();
 
-  // 2️⃣ SPRACHERKENNUNG VERFÜGBAR?
   if (!("webkitSpeechRecognition" in window)) {
     alert("Spracherkennung wird von diesem Browser nicht unterstützt.");
     return;
   }
 
-  // 3️⃣ AUFNAHME STARTEN
   STATE = "listen";
-  startRecognition();
+  startRecognition(myRun);  // 👈 runId in Recognition reinreichen
 };
 
 /* -----------------------------
