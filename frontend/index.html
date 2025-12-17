@@ -626,11 +626,11 @@ function startRecognition() {
 /* -----------------------------
    BUTTON – GREET & LISTEN (STABIL)
 ----------------------------- */
- const micBtn = document.getElementById("micBtn");
+const micBtn = document.getElementById("micBtn");
 
 micBtn.onclick = () => {
 
-  // 1️⃣ ERSTER KLICK → BEGRÜSSUNG (OHNE Reset)
+  // 1️⃣ ERSTER KLICK → BEGRÜSSUNG
   if (!greeted) {
     greeted = true;
     STATE = "greet";
@@ -642,14 +642,14 @@ micBtn.onclick = () => {
     riseStartTime = performance.now();
 
     speak(
-      "Seid gegrüßt, mein Freund. Ich bin Friedrich Barbarossa, nach fast neunhundert Jahren im Kaiserberg zu Lautern erwacht. Was ist Euer Begehr.",
+      "Seid gegrüßt, mein Freund. Ich bin Friedrich Barbarossa, nach fast neunhundert Jahren im Kaiserberg zu Lautern erwacht. Was ist Euer Begehr?",
       false
     );
     return;
   }
 
-  // 🛑 AB HIER: alles sauber beenden
-  hardResetAll();
+  // 🔇 NUR Sprache stoppen – kein Totalreset
+  speechSynthesis.cancel();
 
   // 2️⃣ SPRACHERKENNUNG VERFÜGBAR?
   if (!("webkitSpeechRecognition" in window)) {
@@ -661,7 +661,6 @@ micBtn.onclick = () => {
   STATE = "listen";
   startRecognition();
 };
-
 
 /* -----------------------------
    1) MÄNNLICHE STIMME FEST SETZEN  (GLOBAL!)
