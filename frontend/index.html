@@ -596,7 +596,6 @@ window.addEventListener("focus", () => {
   }
 });
 
-
 /* ===============================
    🎤 RECOGNITION START (SAUBER)
 ================================ */
@@ -604,17 +603,9 @@ window.addEventListener("focus", () => {
 function startRecognition(run) {
 
   if (run !== runId) return;
+  if (recRunning) return;
 
-  if (recRunning) {
-    console.warn("❗RECOGNITION BLOCKED — already running");
-    return;
-  }
-
-  recognitionHandled = false;
-  askInProgress = false;
   lastTranscript = "";
-
-  resetMovements();
   STATE = "listen";
 
   try {
@@ -623,7 +614,7 @@ function startRecognition(run) {
     recognition.onresult = (e) => {
       if (localRun !== runId) return;
       lastTranscript = e.results[0][0].transcript;
-      console.log("🎤 RESULT", lastTranscript);
+      console.log("🎤 RESULT:", lastTranscript);
     };
 
     recognition.onend = () => {
@@ -632,20 +623,16 @@ function startRecognition(run) {
       recRunning = false;
       console.log("🎤 END");
 
-      // 🔑 ENTSCHEIDEND: Antwort hier starten
       if (lastTranscript && lastTranscript.trim().length > 0) {
-        askInProgress = true;
         handleQuestion(lastTranscript);
       } else {
-        console.warn("❗Keine Sprache erkannt");
         STATE = "idle";
       }
     };
 
-    recognition.onerror = (e) => {
+    recognition.onerror = () => {
       if (localRun !== runId) return;
       recRunning = false;
-      console.warn("🎤 ERROR", e);
       STATE = "idle";
     };
 
@@ -653,7 +640,6 @@ function startRecognition(run) {
     recRunning = true;
 
   } catch (e) {
-    console.warn("❗Recognition start error:", e);
     recRunning = false;
   }
 }
@@ -665,9 +651,7 @@ const micBtn = document.getElementById("micBtn");
 
 micBtn.onclick = () => {
 
-  console.log("MIC CLICK");
-
-  // 1️⃣ ERSTER KLICK → BEGRÜSSUNG (kein runId, kein Reset)
+  // 1️⃣ ERSTER KLICK → BEGRÜSSUNG
   if (!greeted) {
     greeted = true;
     STATE = "greet";
@@ -685,17 +669,22 @@ micBtn.onclick = () => {
     return;
   }
 
-  // 2️⃣ NEUER FRAGE–ANTWORT-DURCHLAUF
-  runId++;
-  console.log("RUN START", runId);
+  // 2️⃣ WENN AUFNAHME LÄUFT → STOPPEN
+  if (recRunning) {
+    console.log("🎤 STOP RECORDING");
+    try {
+      recognition.stop();
+    } catch (e) {}
+    return;
+  }
 
-  // 🔑 ENTSCHEIDEND: Recognition-GUARD FREIGEBEN
+  // 3️⃣ NEUE AUFNAHME STARTEN
+  runId++;
+  console.log("🎤 START RECORDING, run", runId);
+
+  speechSynthesis.cancel();
   recRunning = false;
 
-  // laufende Sprache stoppen
-  speechSynthesis.cancel();
-
-  // Browser-Check
   if (!("webkitSpeechRecognition" in window)) {
     alert("Spracherkennung wird von diesem Browser nicht unterstützt.");
     return;
