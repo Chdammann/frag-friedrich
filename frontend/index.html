@@ -624,9 +624,14 @@ function startRecognition() {
 }
 
 /* -----------------------------
-   BUTTON – GREET & LISTEN
+   BUTTON – GREET & LISTEN (STABIL)
 ----------------------------- */
-document.getElementById("micBtn").onclick = () => {
+const micBtn = document.getElementById("micBtn");
+
+micBtn.onclick = () => {
+
+  // 🛑 IMMER: alles sauber beenden
+  hardResetAll();
 
   // 🛡️ Wake-Guard: erster Klick nach Ruhemodus tut nichts
   if (wakeGuard) {
@@ -636,9 +641,10 @@ document.getElementById("micBtn").onclick = () => {
 
   // 1️⃣ ERSTER KLICK → BEGRÜSSUNG
   if (!greeted) {
-    resetMovements();
     greeted = true;
     STATE = "greet";
+
+    resetMovements();
 
     frontalFix = false;
     rising = true;
@@ -652,12 +658,12 @@ document.getElementById("micBtn").onclick = () => {
   }
 
   // 2️⃣ SPRACHERKENNUNG VERFÜGBAR?
-  if (!recognition) {
+  if (!("webkitSpeechRecognition" in window)) {
     alert("Spracherkennung wird von diesem Browser nicht unterstützt.");
     return;
   }
 
-  // 3️⃣ ERKENNUNG STARTEN (SAUBER GEKAPSELT)
+  // 3️⃣ AUFNAHME STARTEN (FRISCH & DEFINIERT)
   startRecognition();
 };
 
