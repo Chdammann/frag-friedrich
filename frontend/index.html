@@ -571,6 +571,7 @@ micBtn.onclick = () => {
 
 function startRecognition(run) {
 
+  // 🔒 Run-Schutz
   if (run !== runId) return;
   if (recRunning) return;
 
@@ -597,7 +598,7 @@ function startRecognition(run) {
 
       console.log("🎤 FINAL RESULT:", lastTranscript);
 
-      // 👉 HIER Antwort starten (robust)
+      // ✅ Antwort sofort starten (robust auf Desktop-Chrome)
       handleQuestion(lastTranscript);
     };
 
@@ -607,9 +608,10 @@ function startRecognition(run) {
       console.log("🎤 END");
     };
 
-    recognition.onerror = () => {
+    recognition.onerror = (e) => {
       if (localRun !== runId) return;
       recRunning = false;
+      console.warn("🎤 ERROR", e);
       STATE = "idle";
     };
 
@@ -617,12 +619,43 @@ function startRecognition(run) {
     recRunning = true;
 
   } catch (e) {
+    console.warn("❗Recognition start error:", e);
     recRunning = false;
   }
 }
 
+/* ===============================
+   🏛️ MUSEUMS-RESET (STABIL & PASSIV)
+================================ */
 
-  // --- Flags neutralisieren ---
+function museumReset(reason = "") {
+  console.log("🛡️ Museum-Reset", reason);
+
+  // ❌ Niemals in aktive Abläufe eingreifen
+  if (talking || recRunning) {
+    console.log("⛔ Reset abgebrochen – Interaktion aktiv");
+    return;
+  }
+
+  // --- Speech sicher beenden ---
+  try {
+    speechSynthesis.cancel();
+  } catch (e) {}
+
+  // --- Recognition nur sauber stoppen, niemals abort ---
+  if (typeof recognition !== "undefined" && recognition && recRunning) {
+    try {
+      recognition.stop();
+    } catch (e) {}
+    recRunning = false;
+  }
+
+  // --- KEIN Reset von:
+  // STATE
+  // greeted
+  // runId
+
+  // --- Bewegungs-Flags neutralisieren ---
   talking = false;
   rising = false;
   hmNeigen = false;
@@ -656,7 +689,7 @@ function startRecognition(run) {
    🔁 MUSEUMS-TRIGGER (SEHR STARK BEGRENZT)
 ================================ */
 
-// Reset NUR bei TAB-VERLUST (nicht bei focus!)
+// Reset NUR bei echtem Tab-Verlust (nicht bei focus!)
 document.addEventListener("visibilitychange", () => {
   if (
     document.hidden &&
