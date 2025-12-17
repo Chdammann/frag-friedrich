@@ -515,135 +515,6 @@ if ("webkitSpeechRecognition" in window) {
   };
 }
 
-/* ===============================
-   🏛️ MUSEUMS-RESET (Wake / Fokus)
-================================ */
-
-function museumReset(reason = "") {
-  console.log("🛡️ Museum-Reset", reason);
-
-  // 🛡️ Wake-Guard: erster Klick nach Sleep wird ignoriert
-  wakeGuard = true;
-  setTimeout(() => {
-    wakeGuard = false;
-    console.log("🟢 Wake-Guard aufgehoben");
-  }, 600);
-
-  // 🛡️ Wake-Stabilisierung: Recognition nach Sleep blocken
-  wakeStabilizing = true;
-  setTimeout(() => {
-    wakeStabilizing = false;
-    console.log("🟢 Wake stabilisiert");
-  }, 1200);
-
-  // --- Speech sauber abbrechen ---
-  try {
-    speechSynthesis.cancel();
-  } catch (e) {}
-
-  if (typeof recognition !== "undefined" && recognition && recRunning) {
-    try {
-      recognition.abort();
-    } catch (e) {}
-    recRunning = false;
-  }
-
-  // --- State Machine auf Urzustand ---
-  STATE = "idle";
-  greeted = false;
-  talking = false;
-  rising = false;
-  hmNeigen = false;
-  frontalFix = false;
-
-  lastTranscript = "";
-  justFinishedSpeaking = false;
-  mouthCooldown = false;
-
-  // Guards zurücksetzen
-  recognitionHandled = false;
-  askInProgress = false;
-
-  // --- Mund neutralisieren (VISEME) ---
-  try {
-    if (typeof setViseme === "function") {
-      setViseme("M", 0);
-    }
-  } catch (e) {}
-
-  // --- Kopf & Position neutral ---
-  if (model) {
-    model.position.y = baseY;
-    model.rotation.x = baseRotX;
-    model.rotation.y = baseRotY - Math.PI / 2;
-  }
-}
-
-
-/* ===============================
-   🔁 MUSEUMS-TRIGGER (Idle-only)
-================================ */
-
-document.addEventListener("visibilitychange", () => {
-  if (!document.hidden && STATE === "idle" && !talking && !recRunning) {
-    museumReset("visibilitychange");
-  }
-});
-
-window.addEventListener("focus", () => {
-  if (STATE === "idle" && !talking && !recRunning) {
-    museumReset("focus");
-  }
-});
-
-/* ===============================
-   🎤 RECOGNITION START (SAUBER)
-================================ */
-
-function startRecognition(run) {
-
-  if (run !== runId) return;
-  if (recRunning) return;
-
-  lastTranscript = "";
-  STATE = "listen";
-
-  try {
-    const localRun = run;
-
-    recognition.onresult = (e) => {
-      if (localRun !== runId) return;
-      lastTranscript = e.results[0][0].transcript;
-      console.log("🎤 RESULT:", lastTranscript);
-    };
-
-    recognition.onend = () => {
-      if (localRun !== runId) return;
-
-      recRunning = false;
-      console.log("🎤 END");
-
-      if (lastTranscript && lastTranscript.trim().length > 0) {
-        handleQuestion(lastTranscript);
-      } else {
-        STATE = "idle";
-      }
-    };
-
-    recognition.onerror = () => {
-      if (localRun !== runId) return;
-      recRunning = false;
-      STATE = "idle";
-    };
-
-    recognition.start();
-    recRunning = true;
-
-  } catch (e) {
-    recRunning = false;
-  }
-}
-
 /* -----------------------------
    BUTTON – GREET & LISTEN (STABIL)
 ----------------------------- */
@@ -694,6 +565,109 @@ micBtn.onclick = () => {
   startRecognition(runId);
 };
 
+/* ===============================
+   🎤 RECOGNITION START (MUSEUM-STABIL)
+================================ */
+
+function startRecognition(run) {
+
+  if (run !== runId) return;
+  if (recRunning) return;
+
+  lastTranscript = "";
+  recognitionHandled = false;
+  STATE = "listen";
+
+  try {
+    const localRun = run;
+
+    recognition.continuous = false;
+    recognition.interimResults = true;
+    recognition.lang = "de-DE";
+
+    recognition.onresult = (e) => {
+      if (localRun !== runId) return;
+      if (recognitionHandled) return;
+
+      const res = e.results[e.results.length - 1][0].transcript;
+      if (!res || res.trim().length < 2) return;
+
+      recognitionHandled = true;
+      lastTranscript = res;
+
+      console.log("🎤 FINAL RESULT:", lastTranscript);
+
+      // 👉 HIER Antwort starten (robust)
+      handleQuestion(lastTranscript);
+    };
+
+    recognition.onend = () => {
+      if (localRun !== runId) return;
+      recRunning = false;
+      console.log("🎤 END");
+    };
+
+    recognition.onerror = () => {
+      if (localRun !== runId) return;
+      recRunning = false;
+      STATE = "idle";
+    };
+
+    recognition.start();
+    recRunning = true;
+
+  } catch (e) {
+    recRunning = false;
+  }
+}
+
+
+  // --- Flags neutralisieren ---
+  talking = false;
+  rising = false;
+  hmNeigen = false;
+  frontalFix = false;
+
+  lastTranscript = "";
+  justFinishedSpeaking = false;
+  mouthCooldown = false;
+
+  recognitionHandled = false;
+  askInProgress = false;
+
+  // --- Mund neutralisieren (VISEME) ---
+  try {
+    if (typeof setViseme === "function") {
+      setViseme("M", 0);
+    }
+  } catch (e) {}
+
+  // --- Kopf & Position neutral ---
+  if (model) {
+    model.position.y = baseY;
+    model.rotation.x = baseRotX;
+    model.rotation.y = baseRotY - Math.PI / 2;
+  }
+
+  console.log("🟢 Museum-Reset abgeschlossen");
+}
+
+/* ===============================
+   🔁 MUSEUMS-TRIGGER (SEHR STARK BEGRENZT)
+================================ */
+
+// Reset NUR bei TAB-VERLUST (nicht bei focus!)
+document.addEventListener("visibilitychange", () => {
+  if (
+    document.hidden &&
+    STATE === "idle" &&
+    !talking &&
+    !recRunning
+  ) {
+    museumReset("visibilitychange");
+  }
+});
+
 /* -----------------------------
    1) MÄNNLICHE STIMME FEST SETZEN  (GLOBAL!)
 ----------------------------- */
@@ -729,9 +703,12 @@ function lerp(a, b, t) {
 }
 
 /* -----------------------------
-   SPEAK – FINAL (VISEME, GREET-FIX)
+   SPEAK – FINAL (VISEME, RUN-SAFE, NO-CLAP)
 ----------------------------- */
 function speak(text, slow = false) {
+
+  // 🔒 Run-Isolation
+  const localRun = runId;
 
   const u = new SpeechSynthesisUtterance(text);
   u.lang = "de-DE";
@@ -760,7 +737,6 @@ function speak(text, slow = false) {
 
     if (!visemeMesh || !visemeMesh.morphTargetInfluences) return;
 
-    // ❗ sofortiger Endzustand – keine Animation
     visemeMesh.morphTargetInfluences.fill(0);
     visemeMesh.morphTargetInfluences[visemeIndex.M] = baseClose;
   }
@@ -769,18 +745,23 @@ function speak(text, slow = false) {
     const r = Math.random();
     if (r < 0.42) return "A";
     if (r < 0.68) return "U";
-    if (r < 0.84) return "E"; // ≈ I
+    if (r < 0.84) return "E";
     return "O";
   }
 
   function startVisemes() {
     if (active || !visemeMesh || !visemeMesh.morphTargetInfluences) return;
+    if (localRun !== runId) return;
 
     active = true;
     let targetIdx = visemeIndex[chooseNextViseme()];
 
     timer = setInterval(() => {
-      if (!active) return;
+      if (!active || localRun !== runId) {
+        clearInterval(timer);
+        timer = null;
+        return;
+      }
 
       if (Math.random() < 0.50) {
         targetIdx = visemeIndex[chooseNextViseme()];
@@ -788,8 +769,9 @@ function speak(text, slow = false) {
 
       let target = 0.50 + Math.random() * 0.20;
 
-      // O & E dämpfen
-      const key = Object.keys(visemeIndex).find(k => visemeIndex[k] === targetIdx);
+      const key = Object.keys(visemeIndex).find(
+        k => visemeIndex[k] === targetIdx
+      );
       if (key === "O") target *= 0.65;
       if (key === "E") target *= 0.75;
 
@@ -806,6 +788,8 @@ function speak(text, slow = false) {
      START
   ----------------------------- */
   u.onstart = () => {
+    if (localRun !== runId) return;
+
     talking = true;
     mouthCooldown = false;
     justFinishedSpeaking = false;
@@ -816,10 +800,9 @@ function speak(text, slow = false) {
 
   /* -----------------------------
      SATZZEICHEN
-     – Begrüßung: IGNORIEREN
-     – Antworten: sanfte Pausen
   ----------------------------- */
   u.onboundary = e => {
+    if (localRun !== runId) return;
     if (isGreeting) return;
     if (!active || !e || typeof e.charIndex !== "number") return;
 
@@ -827,7 +810,9 @@ function speak(text, slow = false) {
 
     if (",;:".includes(ch)) {
       active = false;
-      setTimeout(() => startVisemes(), 90);
+      setTimeout(() => {
+        if (localRun === runId) startVisemes();
+      }, 90);
     }
 
     if (".!?".includes(ch)) {
@@ -836,16 +821,30 @@ function speak(text, slow = false) {
   };
 
   /* -----------------------------
-     ENDE – SOFORT RUHE
+     ENDE – ABSOLUTER SCHLUSS
   ----------------------------- */
   u.onend = () => {
-    hardStopToRest();
+    if (localRun !== runId) return;
+
+    // 🔒 endgültiger Mund-Stopp – kein Nachklappern möglich
+    active = false;
+
+    if (timer) {
+      clearInterval(timer);
+      timer = null;
+    }
+
+    if (visemeMesh && visemeMesh.morphTargetInfluences) {
+      visemeMesh.morphTargetInfluences.fill(0);
+      visemeMesh.morphTargetInfluences[visemeIndex.M] = baseClose;
+    }
 
     talking = false;
     justFinishedSpeaking = true;
     mouthCooldown = true;
 
     setTimeout(() => {
+      if (localRun !== runId) return;
       justFinishedSpeaking = false;
       mouthCooldown = false;
     }, 120);
