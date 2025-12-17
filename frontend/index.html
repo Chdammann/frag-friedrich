@@ -669,7 +669,9 @@ const micBtn = document.getElementById("micBtn");
 
 micBtn.onclick = () => {
 
-  // 1️⃣ ERSTER KLICK → BEGRÜSSUNG (kein runId++)
+  console.log("MIC CLICK");
+
+  // 1️⃣ ERSTER KLICK → BEGRÜSSUNG (kein runId, kein Reset)
   if (!greeted) {
     greeted = true;
     STATE = "greet";
@@ -687,21 +689,24 @@ micBtn.onclick = () => {
     return;
   }
 
-  // ✅ Ab hier startet ein neuer Frage→Antwort-Zyklus
+  // 2️⃣ NEUER FRAGE–ANTWORT-DURCHLAUF
   runId++;
-  const myRun = runId;
-  console.log("RUN START", myRun);
+  console.log("RUN START", runId);
 
-  // 🔇 nur Sprache stoppen (kein Totalreset)
+  // 🔑 ENTSCHEIDEND: Recognition-GUARD FREIGEBEN
+  recRunning = false;
+
+  // laufende Sprache stoppen
   speechSynthesis.cancel();
 
+  // Browser-Check
   if (!("webkitSpeechRecognition" in window)) {
     alert("Spracherkennung wird von diesem Browser nicht unterstützt.");
     return;
   }
 
   STATE = "listen";
-  startRecognition(myRun);  // 👈 runId in Recognition reinreichen
+  startRecognition(runId);
 };
 
 /* -----------------------------
