@@ -601,55 +601,52 @@ window.addEventListener("focus", () => {
    🎤 RECOGNITION START (SAUBER)
 ================================ */
 
-/* ===============================
-   🎤 RECOGNITION START (SAUBER)
-================================ */
-
 function startRecognition(run) {
 
-  // ❌ veralteter Durchlauf → ignorieren
-  if (run !== runId) {
-    console.warn("❌ startRecognition ignored (stale run)", run);
-    return;
-  }
+  if (run !== runId) return;
 
   if (recRunning) {
     console.warn("❗RECOGNITION BLOCKED — already running");
     return;
   }
 
-  // 🛡️ Guards für neuen Durchlauf zurücksetzen
   recognitionHandled = false;
   askInProgress = false;
+  lastTranscript = "";
 
   resetMovements();
-  lastTranscript = "";
   STATE = "listen";
 
   try {
-    // 🔒 lokale Bindung für Callbacks
     const localRun = run;
 
     recognition.onresult = (e) => {
-      if (localRun !== runId) return;   // ❌ alter Run
-      recognitionHandled = true;
-
+      if (localRun !== runId) return;
       lastTranscript = e.results[0][0].transcript;
-      console.log("🎤 RESULT (run)", localRun, lastTranscript);
-
-      handleQuestion(lastTranscript);
+      console.log("🎤 RESULT", lastTranscript);
     };
 
     recognition.onend = () => {
-      if (localRun !== runId) return;   // ❌ alter Run
+      if (localRun !== runId) return;
+
       recRunning = false;
-      console.log("🎤 END (run)", localRun);
+      console.log("🎤 END");
+
+      // 🔑 ENTSCHEIDEND: Antwort hier starten
+      if (lastTranscript && lastTranscript.trim().length > 0) {
+        askInProgress = true;
+        handleQuestion(lastTranscript);
+      } else {
+        console.warn("❗Keine Sprache erkannt");
+        STATE = "idle";
+      }
     };
 
     recognition.onerror = (e) => {
-      if (localRun !== runId) return;   // ❌ alter Run
+      if (localRun !== runId) return;
       recRunning = false;
-      console.warn("🎤 ERROR (run)", localRun, e);
+      console.warn("🎤 ERROR", e);
+      STATE = "idle";
     };
 
     recognition.start();
@@ -660,7 +657,6 @@ function startRecognition(run) {
     recRunning = false;
   }
 }
-
 
 /* -----------------------------
    BUTTON – GREET & LISTEN (STABIL)
