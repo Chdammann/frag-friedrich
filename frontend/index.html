@@ -626,20 +626,11 @@ function startRecognition() {
 /* -----------------------------
    BUTTON – GREET & LISTEN (STABIL)
 ----------------------------- */
-const micBtn = document.getElementById("micBtn");
+ const micBtn = document.getElementById("micBtn");
 
 micBtn.onclick = () => {
 
-  // 🛑 IMMER: alles sauber beenden
-  hardResetAll();
-
-  // 🛡️ Wake-Guard: erster Klick nach Ruhemodus tut nichts
-  if (wakeGuard) {
-    console.log("⏳ Klick ignoriert (Wake-Guard)");
-    return;
-  }
-
-  // 1️⃣ ERSTER KLICK → BEGRÜSSUNG
+  // 1️⃣ ERSTER KLICK → BEGRÜSSUNG (OHNE Reset)
   if (!greeted) {
     greeted = true;
     STATE = "greet";
@@ -657,15 +648,20 @@ micBtn.onclick = () => {
     return;
   }
 
+  // 🛑 AB HIER: alles sauber beenden
+  hardResetAll();
+
   // 2️⃣ SPRACHERKENNUNG VERFÜGBAR?
   if (!("webkitSpeechRecognition" in window)) {
     alert("Spracherkennung wird von diesem Browser nicht unterstützt.");
     return;
   }
 
-  // 3️⃣ AUFNAHME STARTEN (FRISCH & DEFINIERT)
+  // 3️⃣ AUFNAHME STARTEN
+  STATE = "listen";
   startRecognition();
 };
+
 
 /* -----------------------------
    1) MÄNNLICHE STIMME FEST SETZEN  (GLOBAL!)
