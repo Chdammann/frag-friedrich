@@ -700,6 +700,16 @@ document.addEventListener("visibilitychange", () => {
     museumReset("visibilitychange");
   }
 });
+/* ===============================
+   ❓ HANDLE QUESTION (TEMPORÄR)
+================================ */
+
+function handleQuestion(text) {
+  console.log("❓ handleQuestion aufgerufen mit:", text);
+
+  // Minimalreaktion, um die Kette zu testen
+  speak("Einen Moment bitte.", true);
+}
 
 /* -----------------------------
    1) MÄNNLICHE STIMME FEST SETZEN  (GLOBAL!)
