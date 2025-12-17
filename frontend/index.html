@@ -701,14 +701,12 @@ document.addEventListener("visibilitychange", () => {
   }
 });
 /* ===============================
-   ❓ HANDLE QUESTION (TEMPORÄR)
+   ❓ HANDLE QUESTION (TEMP – NO OP)
 ================================ */
 
 function handleQuestion(text) {
-  console.log("❓ handleQuestion aufgerufen mit:", text);
-
-  // Minimalreaktion, um die Kette zu testen
-  speak("Einen Moment bitte.", true);
+  console.log("❓ handleQuestion erhalten:", text);
+  // ABSICHTLICH KEINE AKTION
 }
 
 /* -----------------------------
