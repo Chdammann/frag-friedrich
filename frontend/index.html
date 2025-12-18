@@ -331,33 +331,31 @@ if ("webkitSpeechRecognition" in window) {
   };
 
   recognition.onend = () => {
-
-    // Aufnahme ist definitiv beendet
     recRunning = false;
 
-    // Nur reagieren, wenn wir wirklich aus LISTEN kommen
     if (STATE !== "listen") return;
-
-    // Kein verwertbarer Text → sauber zurück
     if (!lastTranscript) {
       STATE = "idle";
       return;
     }
 
     /* ===============================
-       THINK-PHASE – „Ähm … einen Moment“
+       THINK-PHASE
     =============================== */
 
     STATE = "think";
     resetMovements();
 
+    // 👑 Kopf neigen („Überlegen“)
     hmNeigen = true;
     hmStartTime = performance.now();
 
+    // 🗣️ Denkphrase
     speak("Ähm … einen Moment bitte.", true);
 
     /* ===============================
        FRAGE → SERVER → ANTWORT
+       (erst NACH Think-Phase)
     =============================== */
 
     fetch("/ask", {
@@ -368,6 +366,7 @@ if ("webkitSpeechRecognition" in window) {
     .then(r => r.json())
     .then(data => {
 
+      // Warten, bis Denkphrase wirklich zu Ende ist
       const waitForThinkEnd = setInterval(() => {
         if (!talking) {
           clearInterval(waitForThinkEnd);
@@ -390,6 +389,7 @@ if ("webkitSpeechRecognition" in window) {
     });
   };
 }
+
 /* -----------------------------
    BUTTON – GREET & LISTEN (FINAL)
 ----------------------------- */
