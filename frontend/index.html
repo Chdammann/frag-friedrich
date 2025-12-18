@@ -318,16 +318,25 @@ function animate() {
 
 /* -----------------------------
    STATE MACHINE – RECOGNITION
-   MIT THINK-PHASE (FINAL)
+   MIT THINK-PHASE (WAKE-SICHER)
 ----------------------------- */
 
 let recognition = null;
+let recRunning = false;
+let heardSomething = false;
 
-if ("webkitSpeechRecognition" in window) {
+/* -----------------------------
+   Recognition sauber initialisieren
+----------------------------- */
+function initRecognition() {
+  if (!("webkitSpeechRecognition" in window)) return;
+
   recognition = new webkitSpeechRecognition();
   recognition.lang = "de-DE";
   recognition.continuous = false;
   recognition.interimResults = false;
+
+  heardSomething = false;
 
   recognition.onresult = (e) => {
     if (STATE !== "listen") return;
@@ -336,13 +345,15 @@ if ("webkitSpeechRecognition" in window) {
     if (!res || res.trim().length < 2) return;
 
     lastTranscript = res;
+    heardSomething = true;
   };
 
   recognition.onend = () => {
     recRunning = false;
 
+    // ❗ Kein Think-Phase-Trigger, wenn nicht wirklich gehört wurde
     if (STATE !== "listen") return;
-    if (!lastTranscript) {
+    if (!heardSomething || !lastTranscript) {
       STATE = "idle";
       return;
     }
@@ -374,7 +385,6 @@ if ("webkitSpeechRecognition" in window) {
     .then(r => r.json())
     .then(data => {
 
-      // Warten, bis Denkphrase wirklich zu Ende ist
       const waitForThinkEnd = setInterval(() => {
         if (!talking) {
           clearInterval(waitForThinkEnd);
@@ -419,6 +429,12 @@ micBtn.onclick = () => {
     rising = true;
     riseStartTime = performance.now();
 
+    // 🔁 Wake-sicher: alte Recognition hart verwerfen
+    try {
+      if (recognition) recognition.abort();
+    } catch (e) {}
+    recRunning = false;
+
     speak(
       "Seid gegrüßt, mein Freund. Ich bin Friedrich Barbarossa, nach fast neunhundert Jahren im Kaiserberg zu Lautern erwacht. Was ist Euer Begehr?",
       false
@@ -434,6 +450,9 @@ micBtn.onclick = () => {
       alert("Spracherkennung wird von diesem Browser nicht unterstützt.");
       return;
     }
+
+    // 🔁 Recognition IMMER neu initialisieren (Wake-Fix)
+    initRecognition();
 
     lastTranscript = "";
     STATE = "listen";
@@ -462,6 +481,7 @@ micBtn.onclick = () => {
      ALLES ANDERE → IGNORIEREN
   =============================== */
 };
+
 /* ===============================
    RECOGNITION START
    (DEAKTIVIERT – LOGIK LIEGT IM BUTTON + STATE-MACHINE)
@@ -491,13 +511,12 @@ function museumReset(reason = "") {
     speechSynthesis.cancel();
   } catch (e) {}
 
-  // --- Recognition sauber stoppen ---
-  if (typeof recognition !== "undefined" && recognition && recRunning) {
-    try {
-      recognition.stop();
-    } catch (e) {}
-    recRunning = false;
-  }
+  // --- Recognition hart beenden & verwerfen ---
+  try {
+    if (recognition) recognition.abort();
+  } catch (e) {}
+  recRunning = false;
+  recognition = null;
 
   // --- Bewegungen vollständig neutralisieren ---
   resetMovements();
@@ -538,6 +557,7 @@ document.addEventListener("visibilitychange", () => {
     museumReset("visibilitychange");
   }
 });
+
   /* ===============================
    🎙️ VOICE SETUP (MUSEUMSSTABIL)
 ================================ */
