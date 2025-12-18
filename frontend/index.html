@@ -677,27 +677,34 @@ function speak(text, slow = false) {
   };
 
   /* -----------------------------
-     ENDE – ABSOLUTER SCHLUSS
-  ----------------------------- */
-  u.onend = () => {
-    hardStopToRest();
+   ENDE – ABSOLUTER SCHLUSS
+----------------------------- */
+u.onend = () => {
+  hardStopToRest();
 
-    talking = false;
+  talking = false;
 
-    // Nachklapper-Sperre (kurz, hart)
-    mouthCooldown = true;
-    setTimeout(() => {
-      mouthCooldown = false;
-    }, 120);
+  // kurzer Cooldown gegen Nachklappern
+  mouthCooldown = true;
+  setTimeout(() => {
+    mouthCooldown = false;
+  }, 120);
 
-    // State sauber zurück
-    if (STATE === "answer") {
-      STATE = "idle";
-    }
-  };
+  // ✅ NUR NACH DER ANTWORT: Durchlauf sauber abschließen
+  if (STATE === "answer") {
+    // Bewegungen stoppen
+    resetMovements();
 
-  speechSynthesis.speak(u);
-}
+    // Flags zurücksetzen
+    greeted = false;
+    hmNeigen = false;
+    rising = false;
+
+    // Rückkehr in Ausgangsposition erlauben
+    STATE = "idle";
+  }
+};
+
 
 /* -----------------------------
    RESIZE
