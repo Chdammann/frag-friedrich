@@ -228,69 +228,76 @@ function setViseme(key, value) {
 }
 
 // ====================================
-// ANIMATE – STATE-GESTEUERT & STABIL
+// ANIMATE – FINAL & STABIL (VISEME-KLON)
 // ====================================
 function animate() {
   requestAnimationFrame(animate);
   if (!model) return;
 
   const now = performance.now();
+  const frontalY = -Math.PI / 2;
+  const rightY   = baseRotY - Math.PI / 2;
+  const leftY    = frontalY + 0.25;
 
-  const frontalY = -Math.PI / 2;           // frontal
-  const rightY   = baseRotY - Math.PI / 2; // Ruhepose rechts
-  const leftY    = frontalY + 0.25;        // Hmmm leicht links
+  // 🧊 Mund neutral, wenn nicht gesprochen wird
+  if (!talking && STATE !== "think") {
+    setViseme("M", 0);
+  }
 
   /* ===============================
-     STATE-GESTEUERTE BEWEGUNG
+     THINK-PHASE → HMMM / NEIGEN
+     (HÖCHSTE PRIORITÄT)
   =============================== */
+  if (STATE === "think" && hmNeigen) {
+    const t = Math.min(1, (now - hmStartTime) / hmDuration);
 
-  // 0️⃣ SLEEP / START → ruhig rechts
-  if (STATE === "sleep") {
-    model.position.y = baseY;
-    model.rotation.y = THREE.MathUtils.lerp(model.rotation.y, rightY, 0.05);
-    model.rotation.x = THREE.MathUtils.lerp(model.rotation.x, baseRotX, 0.05);
+    model.rotation.x = THREE.MathUtils.lerp(
+      model.rotation.x,
+      baseRotX + 0.25,
+      0.04
+    );
+    model.rotation.y = THREE.MathUtils.lerp(
+      model.rotation.y,
+      leftY,
+      0.04
+    );
+
+    renderer.render(scene, camera);
+    return; // ⛔ nichts darf darüber hinwegzeichnen
   }
 
-  // 1️⃣ GREET → sanft frontal
-  else if (STATE === "greet") {
-    model.position.y = baseY + Math.sin(now * 0.0012) * 0.006;
-    model.rotation.y = THREE.MathUtils.lerp(model.rotation.y, frontalY, 0.05);
-    model.rotation.x = THREE.MathUtils.lerp(model.rotation.x, 0, 0.05);
+  /* ===============================
+     GREET / ANSWER → FRONTAL
+  =============================== */
+  if (rising) {
+    model.rotation.y = THREE.MathUtils.lerp(model.rotation.y, frontalY, 0.06);
+    model.rotation.x = THREE.MathUtils.lerp(model.rotation.x, 0, 0.06);
   }
 
-  // 2️⃣ LISTEN → ruhig frontal
-  else if (STATE === "listen") {
-    model.position.y = baseY + Math.sin(now * 0.0010) * 0.005;
-    model.rotation.y = THREE.MathUtils.lerp(model.rotation.y, frontalY, 0.04);
-    model.rotation.x = THREE.MathUtils.lerp(model.rotation.x, 0, 0.04);
-  }
-
-  // 3️⃣ ANSWER → frontal + minimale Atmung
-  else if (STATE === "answer") {
+  /* ===============================
+     TALKING / LISTEN
+  =============================== */
+  else if (talking || STATE === "listen" || STATE === "greet") {
     model.position.y = baseY + Math.sin(now * 0.0015) * 0.008;
     model.rotation.y = THREE.MathUtils.lerp(model.rotation.y, frontalY, 0.03);
     model.rotation.x = THREE.MathUtils.lerp(model.rotation.x, 0, 0.03);
   }
 
-  // 4️⃣ IDLE → zurück nach rechts, ruhige Atmung
+  /* ===============================
+     IDLE → SANFT NACH RECHTS
+  =============================== */
   else if (STATE === "idle") {
-    const breathSpeed = 0.0011;
-    const breathAmp   = 0.006;
-    model.position.y  = baseY + Math.sin(now * breathSpeed) * breathAmp;
-
+    model.position.y = baseY + Math.sin(now * 0.0011) * 0.006;
     model.rotation.y = THREE.MathUtils.lerp(model.rotation.y, rightY, 0.03);
     model.rotation.x = THREE.MathUtils.lerp(model.rotation.x, baseRotX, 0.03);
   }
 
   /* ===============================
-     SEHR DEZENTE DRIFT (NUR VISUELL)
+     DRIFT (NUR WENN NICHT THINK)
   =============================== */
-
-  if (STATE === "idle" || STATE === "greet" || STATE === "answer") {
-    const driftX = Math.sin(now * 0.0004) * 0.012;
-    const driftY = Math.sin(now * 0.0003) * 0.010;
-
-    const baseYaw = (STATE === "idle") ? rightY : frontalY;
+  if (STATE !== "think") {
+    const driftX = Math.sin(now * 0.0004) * 0.015;
+    const driftY = Math.sin(now * 0.0003) * 0.012;
 
     model.rotation.x = THREE.MathUtils.lerp(
       model.rotation.x,
@@ -298,6 +305,7 @@ function animate() {
       0.02
     );
 
+    const baseYaw = (STATE === "idle") ? rightY : frontalY;
     model.rotation.y = THREE.MathUtils.lerp(
       model.rotation.y,
       baseYaw + driftY,
