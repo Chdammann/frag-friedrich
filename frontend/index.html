@@ -101,6 +101,10 @@ let greeted = false;
 let talking = false;
 let recRunning = false;
 let runId = 0;          // 🔒 eindeutiger Durchlaufzähler
+let listeningFinished = false;
+let buttonLocked = false;
+let mouthCooldown = false;
+
 
 // === Bewegungszustände ===
 let frontalFix = true;
@@ -239,18 +243,27 @@ function animate() {
   const rightY   = baseRotY - Math.PI / 2;
   const leftY    = frontalY + 0.25;
 
-  // 🧊 Mund neutral, wenn nicht gesprochen wird
-  if (!talking && STATE !== "think") {
+  /* ===============================
+     🛑 MOUTH-COOLDOWN (HÖCHSTE PRIORITÄT)
+     → verhindert Nachklappern
+  =============================== */
+  if (mouthCooldown) {
+    setViseme("M", 0);
+  }
+
+  /* ===============================
+     🧊 Mund neutral, wenn nicht gesprochen wird
+     (NUR wenn KEIN Cooldown aktiv)
+  =============================== */
+  if (!mouthCooldown && !talking && STATE !== "think") {
     setViseme("M", 0);
   }
 
   /* ===============================
      THINK-PHASE → HMMM / NEIGEN
-     (HÖCHSTE PRIORITÄT)
+     (HÖCHSTE PRIORITÄT FÜR KOPF)
   =============================== */
   if (STATE === "think" && hmNeigen) {
-    const t = Math.min(1, (now - hmStartTime) / hmDuration);
-
     model.rotation.x = THREE.MathUtils.lerp(
       model.rotation.x,
       baseRotX + 0.25,
@@ -285,9 +298,14 @@ function animate() {
 
   /* ===============================
      IDLE → SANFT NACH RECHTS
+     + 🫁 ATEM (KOPF / BODY)
   =============================== */
-  else if (STATE === "idle") {
-    model.position.y = baseY + Math.sin(now * 0.0011) * 0.006;
+  else if (STATE === "idle" && !recRunning && !talking) {
+
+    // 🫁 sehr langsame Atembewegung (hoch / runter)
+    const breath = Math.sin(now * 0.0008) * 0.004; // ~ ±2 mm
+
+    model.position.y = baseY + breath;
     model.rotation.y = THREE.MathUtils.lerp(model.rotation.y, rightY, 0.03);
     model.rotation.x = THREE.MathUtils.lerp(model.rotation.x, baseRotX, 0.03);
   }
@@ -358,55 +376,55 @@ function initRecognition() {
       return;
     }
 
-    /* ===============================
-       THINK-PHASE
-    =============================== */
+   /* ===============================
+   THINK-PHASE
+=============================== */
 
-    STATE = "think";
-    resetMovements();
+STATE = "think";
+resetMovements();
 
-    // 👑 Kopf neigen („Überlegen“)
-    hmNeigen = true;
-    hmStartTime = performance.now();
+// 🧠 Think-Bewegung einen Frame verzögert setzen
+requestAnimationFrame(() => {
+  hmNeigen = true;
+  hmStartTime = performance.now();
+});
 
-    // 🗣️ Denkphrase
-    speak("Ähm … einen Moment bitte.", true);
+// 🗣️ Denkphrase
+speak("Ähm … einen Moment bitte.", true);
 
-    /* ===============================
-       FRAGE → SERVER → ANTWORT
-       (erst NACH Think-Phase)
-    =============================== */
+/* ===============================
+   FRAGE → SERVER → ANTWORT
+   (erst NACH Think-Phase)
+=============================== */
 
-    fetch("/ask", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text: lastTranscript })
-    })
-    .then(r => r.json())
-    .then(data => {
+fetch("/ask", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ text: lastTranscript })
+})
+.then(r => r.json())
+.then(data => {
 
-      const waitForThinkEnd = setInterval(() => {
-        if (!talking) {
-          clearInterval(waitForThinkEnd);
+  const waitForThinkEnd = setInterval(() => {
+    if (!talking) {
+      clearInterval(waitForThinkEnd);
 
-          STATE = "answer";
-          resetMovements();
-
-          rising = true;
-          riseStartTime = performance.now();
-
-          speak(data.answer);
-        }
-      }, 120);
-
-    })
-    .catch(() => {
       STATE = "answer";
       resetMovements();
-      speak("Verzeiht, ich habe Euch nicht recht verstanden.");
-    });
-  };
-}
+
+      rising = true;
+      riseStartTime = performance.now();
+
+      speak(data.answer);
+    }
+  }, 120);
+
+})
+.catch(() => {
+  STATE = "answer";
+  resetMovements();
+  speak("Verzeiht, ich habe Euch nicht recht verstanden.");
+});
 
 /* -----------------------------
    BUTTON – GREET & LISTEN (FINAL)
@@ -415,6 +433,11 @@ function initRecognition() {
 const micBtn = document.getElementById("micBtn");
 
 micBtn.onclick = () => {
+
+  // 🔒 Button-Guard gegen Doppelklicks
+  if (buttonLocked) return;
+  buttonLocked = true;
+  setTimeout(() => buttonLocked = false, 400);
 
   /* ===============================
      1️⃣ IDLE → GREET
@@ -434,6 +457,7 @@ micBtn.onclick = () => {
       if (recognition) recognition.abort();
     } catch (e) {}
     recRunning = false;
+    listeningFinished = false;
 
     speak(
       "Seid gegrüßt, mein Freund. Ich bin Friedrich Barbarossa, nach fast neunhundert Jahren im Kaiserberg zu Lautern erwacht. Was ist Euer Begehr?",
@@ -443,7 +467,7 @@ micBtn.onclick = () => {
   }
 
   /* ===============================
-     2️⃣ GREET → LISTEN (Aufnahme starten)
+     2️⃣ GREET → LISTEN
   =============================== */
   if (STATE === "greet" && !recRunning) {
     if (!("webkitSpeechRecognition" in window)) {
@@ -451,10 +475,10 @@ micBtn.onclick = () => {
       return;
     }
 
-    // 🔁 Recognition IMMER neu initialisieren (Wake-Fix)
     initRecognition();
 
     lastTranscript = "";
+    listeningFinished = false;
     STATE = "listen";
 
     try {
@@ -468,12 +492,11 @@ micBtn.onclick = () => {
   }
 
   /* ===============================
-     3️⃣ LISTEN → STOP (Aufnahme beenden)
+     3️⃣ LISTEN
+     (kein explizites Stop mehr nötig)
   =============================== */
-  if (STATE === "listen" && recRunning) {
-    try {
-      recognition.stop();
-    } catch (e) {}
+  if (STATE === "listen") {
+    // Klick während Aufnahme wird ignoriert
     return;
   }
 
@@ -484,12 +507,10 @@ micBtn.onclick = () => {
 
 /* ===============================
    RECOGNITION START
-   (DEAKTIVIERT – LOGIK LIEGT IM BUTTON + STATE-MACHINE)
 ================================ */
 
 function startRecognition() {
   // absichtlich leer
-  // Recognition wird ausschließlich über den Button-Block gestartet
 }
 
 
@@ -697,11 +718,13 @@ function speak(text, slow = false) {
 
   /* -----------------------------
      ENDE – ABSOLUTER SCHLUSS
+     + MOUTH-COOLDOWN GEGEN NACHKLAPPERN
   ----------------------------- */
   u.onend = () => {
     hardStopToRest();
     talking = false;
 
+    // 🛑 kurzer Mund-Cooldown (fängt letzte Frames ab)
     mouthCooldown = true;
     setTimeout(() => {
       mouthCooldown = false;
@@ -716,7 +739,7 @@ function speak(text, slow = false) {
     }
   };
 
-  // ❗ DAS HAT GEFEHLT
+  // ❗ Start der Sprachausgabe
   speechSynthesis.speak(u);
 }
 
