@@ -530,6 +530,40 @@ document.addEventListener("visibilitychange", () => {
     museumReset("visibilitychange");
   }
 });
+  /* ===============================
+   🎙️ VOICE SETUP (MUSEUMSSTABIL)
+================================ */
+
+let maleVoice = null;
+
+function setMaleVoice() {
+  try {
+    const voices = speechSynthesis.getVoices();
+    if (!voices || !voices.length) return;
+
+    // bevorzugt: Microsoft Stefan (de-DE), sonst irgendeine de-DE Stimme
+    maleVoice =
+      voices.find(v => v.lang === "de-DE" && v.name.toLowerCase().includes("stefan")) ||
+      voices.find(v => v.lang === "de-DE") ||
+      null;
+
+    if (maleVoice) {
+      console.log("🎙️ Ausgewählte Stimme:", maleVoice);
+    } else {
+      console.warn("⚠️ Keine passende de-DE Stimme gefunden – Standardstimme wird genutzt");
+    }
+  } catch (e) {
+    console.warn("⚠️ setMaleVoice Fehler:", e);
+    maleVoice = null;
+  }
+}
+
+// Chrome/Edge: Stimmen werden oft asynchron geladen
+speechSynthesis.onvoiceschanged = setMaleVoice;
+
+// sofortiger Versuch (falls Stimmen schon da sind)
+setMaleVoice();
+
 /* -----------------------------
    SPEAK – FINAL (VISEME-STABIL)
 ----------------------------- */
