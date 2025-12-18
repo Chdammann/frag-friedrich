@@ -580,7 +580,9 @@ function speak(text, slow = false) {
   const u = new SpeechSynthesisUtterance(text);
   u.lang = "de-DE";
   u.rate = slow ? 0.85 : 1.0;
-  if (maleVoice) u.voice = maleVoice;
+  if (typeof maleVoice !== "undefined" && maleVoice) {
+    u.voice = maleVoice;
+  }
 
   const isGreeting = (STATE === "greet");
 
@@ -589,8 +591,6 @@ function speak(text, slow = false) {
 
   const stepMs = slow ? 135 : 95;
   const lerpFactor = 0.42;
-
-  // Ruhestellung Mund
   const baseClose = 0.04;
 
   /* -----------------------------
@@ -658,7 +658,6 @@ function speak(text, slow = false) {
 
   /* -----------------------------
      SATZZEICHEN
-     (Antworten ja, Begrüßung nein)
   ----------------------------- */
   u.onboundary = e => {
     if (isGreeting) return;
@@ -677,34 +676,29 @@ function speak(text, slow = false) {
   };
 
   /* -----------------------------
-   ENDE – ABSOLUTER SCHLUSS
------------------------------ */
-u.onend = () => {
-  hardStopToRest();
+     ENDE – ABSOLUTER SCHLUSS
+  ----------------------------- */
+  u.onend = () => {
+    hardStopToRest();
+    talking = false;
 
-  talking = false;
+    mouthCooldown = true;
+    setTimeout(() => {
+      mouthCooldown = false;
+    }, 120);
 
-  // kurzer Cooldown gegen Nachklappern
-  mouthCooldown = true;
-  setTimeout(() => {
-    mouthCooldown = false;
-  }, 120);
+    if (STATE === "answer") {
+      resetMovements();
+      greeted = false;
+      hmNeigen = false;
+      rising = false;
+      STATE = "idle";
+    }
+  };
 
-  // ✅ NUR NACH DER ANTWORT: Durchlauf sauber abschließen
-  if (STATE === "answer") {
-    // Bewegungen stoppen
-    resetMovements();
-
-    // Flags zurücksetzen
-    greeted = false;
-    hmNeigen = false;
-    rising = false;
-
-    // Rückkehr in Ausgangsposition erlauben
-    STATE = "idle";
-  }
-};
-
+  // ❗ DAS HAT GEFEHLT
+  speechSynthesis.speak(u);
+}
 
 /* -----------------------------
    RESIZE
