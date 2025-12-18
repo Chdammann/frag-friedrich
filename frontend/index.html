@@ -340,7 +340,6 @@ function animate() {
 ----------------------------- */
 
 let recognition = null;
-
 let heardSomething = false;
 
 /* -----------------------------
@@ -376,55 +375,59 @@ function initRecognition() {
       return;
     }
 
-   /* ===============================
-   THINK-PHASE
-=============================== */
+    /* ===============================
+       THINK-PHASE
+    =============================== */
 
-STATE = "think";
-resetMovements();
+    STATE = "think";
+    resetMovements();
 
-// 🧠 Think-Bewegung einen Frame verzögert setzen
-requestAnimationFrame(() => {
-  hmNeigen = true;
-  hmStartTime = performance.now();
-});
+    // 🧠 Think-Bewegung einen Frame verzögert setzen
+    requestAnimationFrame(() => {
+      hmNeigen = true;
+      hmStartTime = performance.now();
+    });
 
-// 🗣️ Denkphrase
-speak("Ähm … einen Moment bitte.", true);
+    // 🗣️ Denkphrase
+    speak("Ähm … einen Moment bitte.", true);
 
-/* ===============================
-   FRAGE → SERVER → ANTWORT
-   (erst NACH Think-Phase)
-=============================== */
+    /* ===============================
+       FRAGE → SERVER → ANTWORT
+       (erst NACH Think-Phase)
+    =============================== */
 
-fetch("/ask", {
-  method: "POST",
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({ text: lastTranscript })
-})
-.then(r => r.json())
-.then(data => {
+    fetch("/ask", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: lastTranscript })
+    })
+    .then(r => r.json())
+    .then(data => {
 
-  const waitForThinkEnd = setInterval(() => {
-    if (!talking) {
-      clearInterval(waitForThinkEnd);
+      const waitForThinkEnd = setInterval(() => {
+        if (!talking) {
+          clearInterval(waitForThinkEnd);
 
+          STATE = "answer";
+          resetMovements();
+
+          rising = true;
+          riseStartTime = performance.now();
+
+          speak(data.answer);
+        }
+      }, 120);
+
+    })
+    .catch(() => {
       STATE = "answer";
       resetMovements();
+      speak("Verzeiht, ich habe Euch nicht recht verstanden.");
+    });
 
-      rising = true;
-      riseStartTime = performance.now();
+  }; // ✅ recognition.onend geschlossen
+}    // ✅ initRecognition geschlossen
 
-      speak(data.answer);
-    }
-  }, 120);
-
-})
-.catch(() => {
-  STATE = "answer";
-  resetMovements();
-  speak("Verzeiht, ich habe Euch nicht recht verstanden.");
-});
 
 /* -----------------------------
    BUTTON – GREET & LISTEN (FINAL)
