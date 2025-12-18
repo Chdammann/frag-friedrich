@@ -612,7 +612,6 @@ speechSynthesis.onvoiceschanged = setMaleVoice;
 
 // sofortiger Versuch (falls Stimmen schon da sind)
 setMaleVoice();
-
 /* -----------------------------
    SPEAK – FINAL (VISEME-STABIL)
 ----------------------------- */
@@ -739,7 +738,7 @@ function speak(text, slow = false) {
     }
   };
 
-  // ❗ Start der Sprachausgabe
+  // Start der Sprachausgabe
   speechSynthesis.speak(u);
 }
 
