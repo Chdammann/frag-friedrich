@@ -303,7 +303,7 @@ function animate() {
   else if (STATE === "idle" && !recRunning && !talking) {
 
     // 🫁 sehr langsame Atembewegung (hoch / runter)
-    const breath = Math.sin(now * 0.0008) * 0.004; // ~ ±2 mm
+    const breath = Math.sin(now * 0.0008) * 0.006; // ~ ±2 mm
 
     model.position.y = baseY + breath;
     model.rotation.y = THREE.MathUtils.lerp(model.rotation.y, rightY, 0.03);
