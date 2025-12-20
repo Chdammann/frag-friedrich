@@ -73,6 +73,54 @@
 
 <script>
 console.log("SCRIPT START");
+  
+/* ==========================================
+   MUSEUM STARTUP CLEANUP – SICHER & LOKAL
+   ========================================== */
+
+(function museumStartupCleanup() {
+  try {
+    console.log("[Museum] Startup cleanup begin");
+
+    /* 1️⃣ Eigene Storage-Daten löschen */
+    try {
+      localStorage.clear();
+      sessionStorage.clear();
+      console.log("[Museum] localStorage & sessionStorage cleared");
+    } catch (e) {
+      console.warn("[Museum] Storage clear failed:", e);
+    }
+
+    /* 2️⃣ IndexedDB vollständig löschen (Speech / Media-Reste) */
+    if (window.indexedDB && indexedDB.databases) {
+      indexedDB.databases().then(dbs => {
+        dbs.forEach(db => {
+          if (db.name) {
+            indexedDB.deleteDatabase(db.name);
+            console.log("[Museum] IndexedDB deleted:", db.name);
+          }
+        });
+      });
+    }
+
+    /* 3️⃣ Service Worker entfernen (falls jemals vorhanden) */
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.getRegistrations().then(regs => {
+        regs.forEach(reg => {
+          reg.unregister();
+          console.log("[Museum] ServiceWorker unregistered");
+        });
+      });
+    }
+
+    /* 4️⃣ Harte Reset-Flags für Avatar-Logik */
+    window.__MUSEUM_RESET__ = true;
+
+    console.log("[Museum] Startup cleanup done");
+  } catch (err) {
+    console.error("[Museum] Startup cleanup error:", err);
+  }
+})();
 
 /* ===============================
    STATE-DEFINITION + VARIABLEN
