@@ -10,17 +10,33 @@
 <meta name="theme-color" content="#000000">
 
 <style>
+  /* -----------------------------
+     BODY & GRUNDLAYOUT
+  ----------------------------- */
   body {
     margin: 0;
     overflow: hidden;
     background: black;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    height: 100vh;
     font-family: "Georgia", serif;
     color: white;
+    height: 100vh;
   }
+
+  /* -----------------------------
+     CANVAS (Fullscreen-Hintergrund)
+  ----------------------------- */
+  #avatarCanvas {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    display: block;
+    z-index: 1; /* Canvas Hintergrund */
+  }
+
+  /* -----------------------------
+     ÜBERSCHRIFT
+  ----------------------------- */
   h1 {
     position: absolute;
     top: 20px;
@@ -29,47 +45,63 @@
     font-size: 2em;
     color: #e0b36b;
     animation: pulse 3s ease-in-out infinite;
+    z-index: 10;
   }
+
   @keyframes pulse {
-    0%,100% { opacity: 1; }
+    0%, 100% { opacity: 1; }
     50% { opacity: 0.85; }
   }
-  #avatarCanvas { width:100%; height:100%; display:block; }
+
+  /* -----------------------------
+     MIKROFONBUTTON
+  ----------------------------- */
   #micBtn {
-    position:absolute;
-    bottom:60px;
-    left:50%;
-    transform:translateX(-50%);
-    width:80px;
-    height:80px;
-    border-radius:50%;
-    border:none;
-    background:#222;
-    color:white;
-    font-size:32px;
-    cursor:pointer;
+    position: absolute;
+    bottom: 60px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    border: none;
+    background: #222;
+    color: white;
+    font-size: 32px;
+    cursor: pointer;
+    z-index: 10;
   }
-  #micBtn:hover { background:#444; }
+
+  #micBtn:hover { background: #444; }
+
+  /* -----------------------------
+     LOADING TEXT
+  ----------------------------- */
   #loading {
-    position:absolute;
-    top:50%;
-    left:50%;
-    transform:translate(-50%,-50%);
-    color:#ccc;
-    font-size:1.1em;
-    text-align:center;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    color: #ccc;
+    font-size: 1.1em;
+    text-align: center;
+    z-index: 10;
   }
+
+  /* -----------------------------
+     FOOTER (unten zentriert, über allem)
+  ----------------------------- */
   footer {
-  position: fixed;
-  bottom: 12px;
-  left: 50%;
-  transform: translateX(-50%);
-  
-  font-size: 13px;
-  color: #777;
-  text-align: center;
-  pointer-events: none; /* wichtig bei Canvas + Klicks */
-}
+    position: fixed;
+    bottom: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.6);
+    text-align: center;
+    pointer-events: none; /* wichtig bei Canvas + Klicks */
+    z-index: 10000;       /* immer oben */
+  }
 </style>
 </head>
 
