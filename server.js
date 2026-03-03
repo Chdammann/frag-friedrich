@@ -212,7 +212,7 @@ function isSubjectiveInCharacterQuestion(text, lang) {
 }
 
 /* ===============================
-   WIKIDATA (MINIMAL) – Label + Beschreibung
+   WIKIDATA (MINIMAL) – Label + Beschreibung (+ Wikipedia Link + Extract)
 ================================ */
 
 const WD_CACHE = new Map();
@@ -394,6 +394,57 @@ function toEntityQuery(userText, lang) {
   return words.slice(0, 6).join(" ").slice(0, 80);
 }
 
+function trimExtract(txt, maxChars = 420) {
+  const t = String(txt || "").replace(/\s+/g, " ").trim();
+  if (!t) return "";
+  if (t.length <= maxChars) return t;
+  return t.slice(0, maxChars).replace(/\s+\S*$/, "").trim() + " …";
+}
+
+async function getWikipediaSummary(title, lang) {
+  const t0 = String(title || "").trim();
+  if (!t0) return null;
+
+  const cacheKey = `wpsummary:${lang}:${t0.toLowerCase()}`;
+  const cached = wdCacheGet(cacheKey);
+  if (cached !== null) return cached;
+
+  const wpHost = lang === "en" ? "en.wikipedia.org" : "de.wikipedia.org";
+  const encTitle = encodeURIComponent(t0.replace(/ /g, "_"));
+
+  // REST summary endpoint gives a short extract and canonical URL
+  const url = `https://${wpHost}/api/rest_v1/page/summary/${encTitle}`;
+
+  try {
+    const rr = await fetchWithTimeout(url, WD_TIMEOUT_MS);
+    if (!rr.ok) throw new Error(`wp summary http ${rr.status}`);
+    const data = await rr.json();
+
+    // Disambiguation pages are unhelpful as grounding
+    if (data?.type && String(data.type).toLowerCase().includes("disambiguation")) {
+      wdCacheSet(cacheKey, null);
+      return null;
+    }
+
+    const extract = trimExtract(data?.extract || "", 420);
+    const pageUrl =
+      data?.content_urls?.desktop?.page ||
+      `https://${wpHost}/wiki/${encTitle}`;
+
+    const result = {
+      title: data?.title || t0,
+      extract,
+      url: pageUrl,
+    };
+
+    wdCacheSet(cacheKey, result);
+    return result;
+  } catch (e) {
+    wdCacheSet(cacheKey, null);
+    return null;
+  }
+}
+
 async function getWikidataContext(userText, lang) {
   const qRaw = cleanQuery(userText);
   if (!qRaw) return null;
@@ -431,7 +482,10 @@ async function getWikidataContext(userText, lang) {
   const entUrl =
     `https://www.wikidata.org/w/api.php?action=wbgetentities&ids=${encodeURIComponent(
       qid
-    )}` + `&props=labels|descriptions&languages=${encodeURIComponent(lang)}&format=json&origin=*`;
+    )}` +
+    `&props=labels|descriptions|sitelinks&languages=${encodeURIComponent(
+      lang
+    )}&format=json&origin=*`;
 
   try {
     const rr = await fetchWithTimeout(entUrl, WD_TIMEOUT_MS);
@@ -447,11 +501,23 @@ async function getWikidataContext(userText, lang) {
     const label = entity?.labels?.[lang]?.value || qid;
     const description = entity?.descriptions?.[lang]?.value || "";
 
+    // Wikipedia sitelink + Extract
+    const siteKey = lang === "en" ? "enwiki" : "dewiki";
+    const wikiTitle = entity?.sitelinks?.[siteKey]?.title || "";
+    const wp = wikiTitle ? await getWikipediaSummary(wikiTitle, lang) : null;
+
     const result = {
       qid,
       label,
       description,
       url: `https://www.wikidata.org/wiki/${qid}`,
+      wikiTitle: wp?.title || (wikiTitle || ""),
+      wikiUrl: wp?.url || (wikiTitle
+        ? `https://${lang === "en" ? "en" : "de"}.wikipedia.org/wiki/${encodeURIComponent(
+            wikiTitle.replace(/ /g, "_")
+          )}`
+        : ""),
+      wikiExtract: wp?.extract || "",
     };
 
     wdCacheSet(cacheKey, result);
@@ -527,7 +593,10 @@ app.post("/ask", async (req, res) => {
     const wdBlock = wd
       ? `Wikidata (${langUsed.toUpperCase()}): ${wd.label} (${wd.qid})
 Beschreibung: ${wd.description || "—"}
-Quelle: ${wd.url}`
+Quelle: ${wd.url}
+Wikipedia (${langUsed.toUpperCase()}): ${wd.wikiTitle || "—"}
+Extract: ${wd.wikiExtract || "—"}
+Quelle: ${wd.wikiUrl || "—"}`
       : `Wikidata (${langUsed.toUpperCase()}): Kein Treffer oder Timeout.`;
 
     const systemPrompt =
