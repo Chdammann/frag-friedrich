@@ -1,0 +1,210 @@
+﻿<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Barbarossa Admin</title>
+
+
+<style>
+body {
+  font-family: system-ui, sans-serif;
+  background: #111;
+  color: #eee;
+  margin: 0;
+  padding: 16px;
+}
+
+
+h1 {
+  font-size: 1.4rem;
+}
+
+
+input, textarea {
+  width: 100%;
+  padding: 10px;
+  margin-top: 6px;
+  margin-bottom: 12px;
+  border-radius: 8px;
+  border: 1px solid #444;
+  background: #222;
+  color: #fff;
+}
+
+
+textarea {
+  min-height: 100px;
+}
+
+
+button {
+  width: 100%;
+  padding: 12px;
+  margin-top: 8px;
+  border: none;
+  border-radius: 10px;
+  font-weight: bold;
+  font-size: 1rem;
+  cursor: pointer;
+}
+
+
+.btn-main { background: #880000; color: #fff; }
+.btn-main:hover { background: #a30000; }
+
+
+.btn-sec { background: #444; color: #fff; }
+.btn-sec:hover { background: #555; }
+
+
+.btn-warn { background: #9a6a00; color: #fff; }
+.btn-reset { background: #8b1e1e; color: #fff; }
+
+
+.status {
+  margin-top: 12px;
+  padding: 10px;
+  background: #222;
+  border-radius: 8px;
+  font-size: 0.9rem;
+}
+</style>
+</head>
+
+
+<body>
+
+
+<h1>Barbarossa Fernsteuerung</h1>
+
+
+<label>Server URL</label>
+<input id="url" value="https://barbarossa-dialog.onrender.com">
+
+
+<label>REMOTE_SAY_KEY</label>
+<input id="key" type="password">
+
+
+<label>Text sprechen</label>
+<textarea id="msg"></textarea>
+
+
+<button class="btn-main" onclick="send()">Text senden</button>
+<button class="btn-sec" onclick="test()">Verbindung testen</button>
+
+
+<hr>
+
+
+<button onclick="presetGreet()">Begrüßung</button>
+<button class="btn-warn" onclick="presetPause()">Pause</button>
+<button class="btn-reset" onclick="resetAvatar()">Reset</button>
+
+
+<div class="status" id="status">Bereit.</div>
+
+
+<script>
+function setStatus(t) {
+  document.getElementById("status").innerText = t;
+}
+
+
+function base() {
+  return document.getElementById("url").value.replace(/\/$/, "");
+}
+
+
+function key() {
+  return document.getElementById("key").value.trim();
+}
+
+
+async function send() {
+  const text = document.getElementById("msg").value.trim();
+
+
+  if (!text) return setStatus("Kein Text.");
+  if (!key()) return setStatus("Key fehlt.");
+
+
+  setStatus("Sende...");
+
+
+  try {
+    const res = await fetch(base() + "/remote-say", {
+      method: "POST",
+      headers: {"Content-Type":"application/json"},
+      body: JSON.stringify({ key: key(), text })
+    });
+
+
+    const data = await res.json();
+
+
+    if (data?.ok) setStatus("Gesendet ✔");
+    else setStatus("Fehler ❌");
+
+
+  } catch {
+    setStatus("Server nicht erreichbar ❌");
+  }
+}
+
+
+async function test() {
+  document.getElementById("msg").value = "Verbindungstest.";
+  send();
+}
+
+
+function presetGreet() {
+  document.getElementById("msg").value =
+    "Seid gegrüßt, edle Gäste. Ich bin Friedrich Barbarossa und heiße Euch willkommen.";
+  send();
+}
+
+
+function presetPause() {
+  document.getElementById("msg").value =
+    "Einen Augenblick der Ruhe, wenn Ihr erlaubt.";
+  send();
+}
+
+
+async function resetAvatar() {
+  if (!key()) return setStatus("Key fehlt.");
+
+
+  setStatus("Reset sende...");
+
+
+  try {
+    const res = await fetch(base() + "/remote-reset", {
+      method: "POST",
+      headers: {"Content-Type":"application/json"},
+      body: JSON.stringify({ key: key() })
+    });
+
+
+    const data = await res.json();
+
+
+    if (data?.ok) {
+      setStatus("Reset ausgelöst ✔");
+    } else {
+      setStatus("Reset fehlgeschlagen ❌");
+    }
+
+
+  } catch {
+    setStatus("Server nicht erreichbar ❌");
+  }
+}
+</script>
+
+
+</body>
+</html>
